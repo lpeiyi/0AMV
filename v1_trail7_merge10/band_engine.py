@@ -17,6 +17,8 @@ class BandEngine:
         self.sz = None
         self.etf = None
 
+        self._stock_band_cache = {}
+
         self.strategy = {"entry": 3.0, "exit_dd": -7.0, "merge_gap": 10, "sma_n": 10, "sma_m": 2}
         self.cache_path = cache_path or os.path.join(os.getenv("APPDATA", ""), "BandMonitor", "cache.pkl")
 
@@ -25,7 +27,7 @@ class BandEngine:
             import pickle
             with open(self.cache_path, "rb") as f:
                 data = pickle.load(f)
-            if data.get("version") != 1:
+            if data.get("version") not in (1, 2, 3, 4):
                 return False
             self.df = data["df"]
             self.sh = data.get("sh")
@@ -34,10 +36,14 @@ class BandEngine:
             self.oamv = data["oamv"]
             self.oamv_pct = data["oamv_pct"]
             self.bands = data["bands"]
-            self.raw_bands = data["raw_bands"]
+            self.raw_bands = data.get("raw_bands", [])
             self.open_band_start = data.get("open_band_start")
             self.open_band_peak = data.get("open_band_peak")
             self.last_fetch_date = data["fetch_date"]
+            if data.get("version", 1) < 4:
+                self._stock_band_cache = {}
+            else:
+                self._stock_band_cache = data.get("stock_band_cache", {})
             return True
         except Exception:
             return False
@@ -48,7 +54,7 @@ class BandEngine:
             os.makedirs(os.path.dirname(self.cache_path), exist_ok=True)
             with open(self.cache_path, "wb") as f:
                 pickle.dump({
-                    "version": 1,
+                    "version": 4,
                     "fetch_date": self.last_fetch_date,
                     "df": self.df,
                     "sh": self.sh,
@@ -60,6 +66,7 @@ class BandEngine:
                     "raw_bands": self.raw_bands,
                     "open_band_start": self.open_band_start,
                     "open_band_peak": self.open_band_peak,
+                    "stock_band_cache": self._stock_band_cache,
                 }, f)
         except Exception:
             pass
@@ -189,6 +196,62 @@ class BandEngine:
         except:
             pass
         return self.get_status()
+
+    def get_stock_band_return(self, code, start, end):
+        cache_key = (code, start, end)
+        if cache_key in self._stock_band_cache:
+            return self._stock_band_cache[cache_key]
+
+        raw = code[2:] if code[:2] in ('sh', 'sz', 'bj') else code
+        if raw == "000001":
+            ret = self.get_band_return(start, end, "sh")
+            self._stock_band_cache[cache_key] = ret
+            return ret
+        if raw == "399006":
+            ret = self.get_band_return(start, end, "sz")
+            self._stock_band_cache[cache_key] = ret
+            return ret
+        if raw == "159915":
+            ret = self.get_band_return(start, end, "etf")
+            self._stock_band_cache[cache_key] = ret
+            return ret
+
+        import akshare as ak
+        import pandas as pd
+        df = None
+        try:
+            df = ak.stock_zh_a_hist(symbol=raw, period='daily',
+                start_date=start.strftime('%Y%m%d'),
+                end_date=end.strftime('%Y%m%d'), adjust='qfq')
+        except:
+            pass
+        if df is None or len(df) < 2:
+            try:
+                df = ak.fund_etf_hist_em(symbol=raw, period='daily',
+                    start_date=start.strftime('%Y%m%d'),
+                    end_date=end.strftime('%Y%m%d'), adjust='qfq')
+            except:
+                pass
+        if df is None or len(df) < 2:
+            try:
+                df = ak.stock_zh_index_daily_tx(symbol=code)
+            except:
+                pass
+        if df is not None and len(df) >= 2:
+            col = '收盘' if '收盘' in df.columns else ('close' if 'close' in df.columns else None)
+            dcol = '日期' if '日期' in df.columns else ('date' if 'date' in df.columns else None)
+            if col and dcol:
+                dates = pd.to_datetime(df[dcol].values)
+                idx_s = dates.searchsorted(start, side='right') - 1
+                idx_e = dates.searchsorted(end, side='right') - 1
+                if 0 <= idx_s < len(dates) and 0 <= idx_e < len(dates):
+                    s_close = float(df[col].iloc[idx_s])
+                    e_close = float(df[col].iloc[idx_e])
+                    ret = (e_close / s_close - 1) * 100
+                    self._stock_band_cache[cache_key] = ret
+                    return ret
+        self._stock_band_cache[cache_key] = None
+        return None
 
     def get_band_return(self, s, e, metric="etf"):
         if metric == "oamv":

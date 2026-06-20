@@ -438,21 +438,68 @@ class BandPanel(QWidget):
         if status["in_band"]:
             start = status["band_start"]
             end = status["last_date"]
-            ret = self.engine.get_band_return(start, end, metric_key)
-            if ret is None:
-                ret = self.engine.get_band_return(start, end, "oamv")
-            ret_str = f"{ret:+.2f}%" if ret is not None else "N/A"
         elif status["bands"]:
             last = status["bands"][-1]
-            ret = self.engine.get_band_return(last["start"], last["end"], metric_key)
-            if ret is None:
-                ret = self.engine.get_band_return(last["start"], last["end"], "oamv")
-            ret_str = f"{ret:+.2f}%" if ret is not None else "0.00%"
+            start = last["end"]
+            end = status["last_date"]
         else:
-            ret_str = "0.00%"
+            for code in self.checked_codes:
+                self.quote_fetcher.band_returns[code] = "0.00%"
+            self._refresh_stocks()
+            return
+
+        fallback = self.engine.get_band_return(start, end, metric_key)
+        if fallback is None:
+            fallback = self.engine.get_band_return(start, end, "oamv")
+        fallback_str = f"{fallback:+.2f}%" if fallback is not None else "N/A"
+
+        needs_api = False
         for code in self.checked_codes:
-            self.quote_fetcher.band_returns[code] = ret_str
-        self._refresh_stocks()
+            ck = (code, start, end)
+            if ck in self.engine._stock_band_cache:
+                continue
+            raw = code[2:] if code[:2] in ('sh', 'sz', 'bj') else code
+            if raw not in ("000001", "399006", "159915"):
+                needs_api = True
+                break
+
+        if not needs_api:
+            for code in self.checked_codes:
+                ret = self.engine.get_stock_band_return(code, start, end)
+                self.quote_fetcher.band_returns[code] = f"{ret:+.2f}%" if ret is not None else fallback_str
+            self._refresh_stocks()
+        else:
+            for code in self.checked_codes:
+                self.quote_fetcher.band_returns[code] = fallback_str
+            self._refresh_stocks()
+            self._deferred_start = start
+            self._deferred_end = end
+            self._deferred_fallback = fallback_str
+            self._deferred_codes = list(self.checked_codes)
+            self._deferred_idx = 0
+            QTimer.singleShot(0, self._deferred_band_returns)
+
+    def _deferred_band_returns(self):
+        while self._deferred_idx < len(self._deferred_codes):
+            code = self._deferred_codes[self._deferred_idx]
+            if (code, self._deferred_start, self._deferred_end) not in self.engine._stock_band_cache:
+                break
+            ret = self.engine.get_stock_band_return(code, self._deferred_start, self._deferred_end)
+            if ret is not None:
+                self.quote_fetcher.band_returns[code] = f"{ret:+.2f}%"
+            self._deferred_idx += 1
+        if self._deferred_idx >= len(self._deferred_codes):
+            self._refresh_stocks()
+            return
+        code = self._deferred_codes[self._deferred_idx]
+        ret = self.engine.get_stock_band_return(code, self._deferred_start, self._deferred_end)
+        if ret is not None:
+            self.quote_fetcher.band_returns[code] = f"{ret:+.2f}%"
+        self._deferred_idx += 1
+        if self._deferred_idx >= len(self._deferred_codes):
+            self._refresh_stocks()
+        else:
+            QTimer.singleShot(0, self._deferred_band_returns)
 
     def _refresh_stocks(self):
         try:
