@@ -8,7 +8,7 @@ from band_panel import BandPanel
 from band_engine import BandEngine
 from band_settings import SettingsDialog
 
-APP_NAME = "BandMonitor"
+APP_NAME = "0AMVMonitor"
 CONFIG_DIR = os.path.join(os.getenv("APPDATA") or os.path.expanduser("~"), APP_NAME)
 CONFIG_FILE = os.path.join(CONFIG_DIR, "config.json")
 

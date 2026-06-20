@@ -1,6 +1,6 @@
 import os
 from functools import partial
-from PySide6.QtCore import Qt, QSize, QDate
+from PySide6.QtCore import Qt, QSize, QDate, QTimer
 from PySide6.QtGui import QColor, QFontDatabase, QKeySequence
 from PySide6.QtWidgets import QWidget, QDialog, QVBoxLayout, QHBoxLayout, QGridLayout, QTabWidget, QPushButton, QSlider, QGroupBox, QLabel, QColorDialog, QComboBox, QAbstractItemView, QCheckBox, QListWidget, QListWidgetItem, QKeySequenceEdit, QLineEdit, QFileDialog, QDateEdit, QMessageBox
 
@@ -35,9 +35,11 @@ class SettingsDialog(QDialog):
         lay_codes = QHBoxLayout(g_codes)
         self.list_codes = QListWidget()
         self.list_codes.setEditTriggers(QAbstractItemView.DoubleClicked | QAbstractItemView.SelectedClicked | QAbstractItemView.EditKeyPressed)
-        self.list_codes.setFixedWidth(160)
+        self.list_codes.setMinimumWidth(260)
         for c in self.panel.codes:
-            it = QListWidgetItem(c)
+            name = self.panel.get_code_name(c)
+            label = f"{c} - {name}" if name != c else c
+            it = QListWidgetItem(label)
             it.setFlags(it.flags() | Qt.ItemIsUserCheckable | Qt.ItemIsEditable | Qt.ItemIsSelectable | Qt.ItemIsEnabled)
             it.setCheckState(Qt.Checked if c in getattr(self.panel, 'checked_codes', []) else Qt.Unchecked)
             it.setData(Qt.UserRole, c)
@@ -255,24 +257,51 @@ class SettingsDialog(QDialog):
         self.slider_entry.setRange(20, 100)
         self.slider_entry.setValue(int(strat["entry"] * 10))
         self.lbl_entry = QLabel(f"{strat['entry']:.1f}%")
+        self.lbl_entry.setFixedWidth(45)
+        self.btn_entry_sub = QPushButton("－")
+        self.btn_entry_sub.setFixedWidth(24)
+        self.btn_entry_add = QPushButton("＋")
+        self.btn_entry_add.setFixedWidth(24)
         gl_s.addWidget(self.slider_entry, 0, 1)
         gl_s.addWidget(self.lbl_entry, 0, 2)
+        hl_entry = QHBoxLayout()
+        hl_entry.addWidget(self.btn_entry_sub)
+        hl_entry.addWidget(self.btn_entry_add)
+        gl_s.addLayout(hl_entry, 0, 3)
 
         gl_s.addWidget(QLabel("退出回撤 ≤"), 1, 0)
         self.slider_exit = QSlider(Qt.Horizontal)
         self.slider_exit.setRange(20, 200)
         self.slider_exit.setValue(int(abs(strat["exit_dd"]) * 10))
         self.lbl_exit = QLabel(f"{strat['exit_dd']:.0f}%")
+        self.lbl_exit.setFixedWidth(45)
+        self.btn_exit_sub = QPushButton("－")
+        self.btn_exit_sub.setFixedWidth(24)
+        self.btn_exit_add = QPushButton("＋")
+        self.btn_exit_add.setFixedWidth(24)
         gl_s.addWidget(self.slider_exit, 1, 1)
         gl_s.addWidget(self.lbl_exit, 1, 2)
+        hl_exit = QHBoxLayout()
+        hl_exit.addWidget(self.btn_exit_sub)
+        hl_exit.addWidget(self.btn_exit_add)
+        gl_s.addLayout(hl_exit, 1, 3)
 
         gl_s.addWidget(QLabel("合并间隔 ≤"), 2, 0)
         self.slider_merge = QSlider(Qt.Horizontal)
         self.slider_merge.setRange(1, 30)
         self.slider_merge.setValue(strat["merge_gap"])
         self.lbl_merge = QLabel(f"{strat['merge_gap']}天")
+        self.lbl_merge.setFixedWidth(45)
+        self.btn_merge_sub = QPushButton("－")
+        self.btn_merge_sub.setFixedWidth(24)
+        self.btn_merge_add = QPushButton("＋")
+        self.btn_merge_add.setFixedWidth(24)
         gl_s.addWidget(self.slider_merge, 2, 1)
         gl_s.addWidget(self.lbl_merge, 2, 2)
+        hl_merge = QHBoxLayout()
+        hl_merge.addWidget(self.btn_merge_sub)
+        hl_merge.addWidget(self.btn_merge_add)
+        gl_s.addLayout(hl_merge, 2, 3)
 
         gl_s.addWidget(QLabel("SMA N:"), 3, 0)
         self.cmb_sma_n = QComboBox()
@@ -303,7 +332,8 @@ class SettingsDialog(QDialog):
         gl_band_cfg = QGridLayout(g_band_cfg)
         gl_band_cfg.addWidget(QLabel("收益品种:"), 0, 0)
         self.cmb_band_metric = QComboBox()
-        self.cmb_band_metric.setFixedWidth(160)
+        self.cmb_band_metric.setMinimumWidth(240)
+        self.cmb_band_metric.view().setMinimumWidth(280)
         gl_band_cfg.addWidget(self.cmb_band_metric, 0, 1)
         self._refresh_band_metric_combo()
         gl_band_cfg.addWidget(QLabel("(选择后底部历史波段同步更新)"), 1, 0, 1, 2)
@@ -314,7 +344,8 @@ class SettingsDialog(QDialog):
         gl_export = QGridLayout(g_export)
         gl_export.addWidget(QLabel("品种:"), 0, 0)
         self.cmb_export_code = QComboBox()
-        self.cmb_export_code.setFixedWidth(160)
+        self.cmb_export_code.setMinimumWidth(240)
+        self.cmb_export_code.view().setMinimumWidth(280)
         gl_export.addWidget(self.cmb_export_code, 0, 1)
         self._refresh_export_code_combo()
         gl_export.addWidget(QLabel("起始日期:"), 1, 0)
@@ -382,9 +413,18 @@ class SettingsDialog(QDialog):
         self.slider_line.valueChanged.connect(self._on_line)
         self.chk_header.toggled.connect(self._on_header)
         self.chk_grid.toggled.connect(self._on_grid)
-        self.slider_entry.valueChanged.connect(self._on_strat_entry)
-        self.slider_exit.valueChanged.connect(self._on_strat_exit)
-        self.slider_merge.valueChanged.connect(self._on_strat_merge)
+        self.slider_entry.valueChanged.connect(self._on_strat_entry_label)
+        self.slider_entry.sliderReleased.connect(self._on_strat_entry_apply)
+        self.btn_entry_sub.clicked.connect(lambda: self._strat_btn_adj(self.slider_entry, -1, self._on_strat_entry_apply))
+        self.btn_entry_add.clicked.connect(lambda: self._strat_btn_adj(self.slider_entry, 1, self._on_strat_entry_apply))
+        self.slider_exit.valueChanged.connect(self._on_strat_exit_label)
+        self.slider_exit.sliderReleased.connect(self._on_strat_exit_apply)
+        self.btn_exit_sub.clicked.connect(lambda: self._strat_btn_adj(self.slider_exit, -1, self._on_strat_exit_apply))
+        self.btn_exit_add.clicked.connect(lambda: self._strat_btn_adj(self.slider_exit, 1, self._on_strat_exit_apply))
+        self.slider_merge.valueChanged.connect(self._on_strat_merge_label)
+        self.slider_merge.sliderReleased.connect(self._on_strat_merge_apply)
+        self.btn_merge_sub.clicked.connect(lambda: self._strat_btn_adj(self.slider_merge, -1, self._on_strat_merge_apply))
+        self.btn_merge_add.clicked.connect(lambda: self._strat_btn_adj(self.slider_merge, 1, self._on_strat_merge_apply))
         self.cmb_sma_n.currentIndexChanged.connect(self._on_strat_sma)
         self.cmb_sma_m.currentIndexChanged.connect(self._on_strat_sma)
         self.edit_hotkey.editingFinished.connect(self._on_hotkey)
@@ -420,16 +460,16 @@ class SettingsDialog(QDialog):
         codes = []
         seen = set()
         for i in range(self.list_codes.count()):
-            txt = self.list_codes.item(i).text()
-            norm = normalize_code(txt)
+            it = self.list_codes.item(i)
+            txt = it.text()
+            raw = it.data(Qt.UserRole) or txt
+            norm = normalize_code(raw)
             if norm:
                 if norm not in seen:
                     seen.add(norm)
                     codes.append(norm)
-                it = self.list_codes.item(i)
-                if it.text() != norm:
+                if raw != norm:
                     self.list_codes.blockSignals(True)
-                    it.setText(norm)
                     it.setData(Qt.UserRole, norm)
                     self.list_codes.blockSignals(False)
             else:
@@ -531,12 +571,14 @@ class SettingsDialog(QDialog):
         if start_dt >= end_dt:
             QMessageBox.warning(self, "提示", "起始日期必须早于结束日期")
             return
-        import csv, os
+        import csv, os, pandas as pd
         from datetime import datetime
+        start_ts = pd.Timestamp(start_dt)
+        end_ts = pd.Timestamp(end_dt)
         engine = self.panel.engine
         rows = []
         for s, e in engine.bands:
-            if e < start_dt or s > end_dt:
+            if e < start_ts or s > end_ts:
                 continue
             ret = engine.get_stock_band_return(code, s, e)
             ret_str = f"{ret:+.2f}" if ret is not None else "N/A"
@@ -546,9 +588,9 @@ class SettingsDialog(QDialog):
             return
         cache_dir = os.path.dirname(engine.cache_path) if engine.cache_path else ""
         if not cache_dir:
-            cache_dir = os.path.join(os.getenv("APPDATA", ""), "BandMonitor")
+            cache_dir = os.path.join(os.getenv("APPDATA", ""), "0AMVMonitor")
             os.makedirs(cache_dir, exist_ok=True)
-        filename = f"band_returns_{code}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv"
+        filename = f"0amv_returns_{code}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv"
         filepath = os.path.join(cache_dir, filename)
         with open(filepath, 'w', newline='', encoding='utf-8-sig') as f:
             writer = csv.writer(f)
@@ -597,21 +639,27 @@ class SettingsDialog(QDialog):
         self.lbl_line.setText(f"+{v} px")
         self.panel.set_line_extra(v)
 
-    def _on_strat_entry(self, v):
+    def _on_strat_entry_label(self, v):
         val = v / 10.0
         self.lbl_entry.setText(f"{val:.1f}%")
         self.panel.engine.strategy["entry"] = val
+
+    def _on_strat_entry_apply(self):
         self._refresh_strategy()
 
-    def _on_strat_exit(self, v):
+    def _on_strat_exit_label(self, v):
         val = -v / 10.0
         self.lbl_exit.setText(f"{val:.0f}%")
         self.panel.engine.strategy["exit_dd"] = val
+
+    def _on_strat_exit_apply(self):
         self._refresh_strategy()
 
-    def _on_strat_merge(self, v):
+    def _on_strat_merge_label(self, v):
         self.lbl_merge.setText(f"{v}天")
         self.panel.engine.strategy["merge_gap"] = v
+
+    def _on_strat_merge_apply(self):
         self._refresh_strategy()
 
     def _on_strat_sma(self):
@@ -623,6 +671,15 @@ class SettingsDialog(QDialog):
             self._refresh_strategy()
 
     def _refresh_strategy(self):
+        QTimer.singleShot(0, lambda: self._do_refresh_strategy())
+
+    def _strat_btn_adj(self, slider, delta, apply_fn):
+        v = slider.value() + delta
+        v = max(slider.minimum(), min(slider.maximum(), v))
+        slider.setValue(v)
+        apply_fn()
+
+    def _do_refresh_strategy(self):
         self.panel.engine._compute()
         self.panel.engine._detect()
         self.panel._refresh_engine()

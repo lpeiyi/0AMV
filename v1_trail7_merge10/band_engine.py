@@ -20,7 +20,7 @@ class BandEngine:
         self._stock_band_cache = {}
 
         self.strategy = {"entry": 3.0, "exit_dd": -7.0, "merge_gap": 10, "sma_n": 10, "sma_m": 2}
-        self.cache_path = cache_path or os.path.join(os.getenv("APPDATA", ""), "BandMonitor", "cache.pkl")
+        self.cache_path = cache_path or os.path.join(os.getenv("APPDATA", ""), "0AMVMonitor", "cache.pkl")
 
     def load_cache(self):
         try:

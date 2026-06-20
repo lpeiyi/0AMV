@@ -388,9 +388,15 @@ class BandPanel(QWidget):
                 f'</span>'
             )
         else:
+            if status["bands"]:
+                last_end = status["bands"][-1]["end"]
+                bear_days = (status["last_date"] - last_end).days
+                date_str = f'{last_end.date()}起 ({bear_days}天)'
+            else:
+                date_str = f'{status["last_date"].date()}起'
             self.status_label.setText(
                 f'<span style="color:#00cc66;font-size:{font_pt+2}pt;font-weight:600;">🟢 空头区间</span>'
-                f'<span style="font-size:{font_pt}pt;">  等待信号 ≥ +{self.engine.strategy["entry"]:.1f}%</span>'
+                f'<span style="font-size:{font_pt}pt;">  {date_str}</span>'
             )
             self.metrics_label.setText(
                 f'<span style="font-size:{font_pt}pt;">'
