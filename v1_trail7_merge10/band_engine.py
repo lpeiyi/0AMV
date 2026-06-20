@@ -1,0 +1,193 @@
+import akshare as ak
+import pandas as pd
+import numpy as np
+import time
+
+BAND_RET_METRICS = {"159915": "etf", "上证指数": "sh", "创业板指": "sz", "0AMV": "oamv"}
+
+class BandEngine:
+    def __init__(self):
+        self.df = None
+        self.oamv = None
+        self.oamv_pct = None
+        self.bands = []
+        self.raw_bands = []
+        self.open_band_start = None
+        self.open_band_peak = None
+        self.last_fetch_date = None
+
+        self.sh = None
+        self.sz = None
+        self.etf = None
+
+        self.strategy = {"entry": 3.0, "exit_dd": -7.0, "merge_gap": 10, "sma_n": 10, "sma_m": 2}
+
+    def fetch_all(self):
+        for i in range(5):
+            try:
+                df = ak.stock_zh_index_hist_csindex(symbol='000985', start_date='20100101', end_date='20261231')
+                df = df.rename(columns={'日期': 'date', '成交金额': 'amount_yi'})
+                df['date'] = pd.to_datetime(df['date'])
+                self.df = df.sort_values('date').reset_index(drop=True)
+                self.last_fetch_date = self.df['date'].max()
+                break
+            except Exception as e:
+                time.sleep(5)
+        if self.df is None:
+            raise Exception('000985 fetch failed')
+
+        self.sh = pd.DataFrame()
+        self.sz = pd.DataFrame()
+        self.etf = pd.DataFrame()
+        for i in range(5):
+            try:
+                self.sh = ak.stock_zh_index_hist_csindex(symbol='000001', start_date='20100101', end_date='20261231')
+                self.sh['date'] = pd.to_datetime(self.sh['日期'])
+                self.sh = self.sh.sort_values('date').set_index('date')
+                break
+            except:
+                time.sleep(5)
+        for i in range(5):
+            try:
+                self.sz = ak.stock_zh_index_daily_tx(symbol='sz399006')
+                self.sz['date'] = pd.to_datetime(self.sz['date'])
+                self.sz = self.sz.sort_values('date').set_index('date')
+                break
+            except:
+                time.sleep(3)
+        for i in range(5):
+            try:
+                self.etf = ak.stock_zh_index_daily_tx(symbol='sz159915')
+                self.etf['date'] = pd.to_datetime(self.etf['date'])
+                self.etf = self.etf.sort_values('date').set_index('date')
+                break
+            except:
+                time.sleep(3)
+
+        self._compute()
+        self._detect()
+
+    def _compute(self):
+        self.oamv = np.zeros(len(self.df))
+        N = self.strategy['sma_n']
+        M = self.strategy['sma_m']
+        a = self.df['amount_yi'].values
+        for i in range(len(a)):
+            self.oamv[i] = a[i] if i == 0 else (M * a[i] + (N - M) * self.oamv[i-1]) / N
+        self.oamv_pct = np.diff(self.oamv) / self.oamv[:-1] * 100
+        self.oamv_pct = np.insert(self.oamv_pct, 0, 0)
+
+    def _detect(self):
+        entry = self.strategy['entry']
+        exit_dd = self.strategy['exit_dd']
+        merge_gap = self.strategy['merge_gap']
+
+        data = self.df[self.df['date'] >= '2022-01-01'].copy()
+        oamv = self.oamv[self.df['date'] >= '2022-01-01']
+        pct = self.oamv_pct[self.df['date'] >= '2022-01-01']
+        dates = data['date'].values
+
+        raw = []
+        start = None
+        peak = None
+        for i in range(len(dates)):
+            if start is None:
+                if pct[i] >= entry:
+                    start = pd.Timestamp(dates[i])
+                    peak = oamv[i]
+            else:
+                if oamv[i] > peak:
+                    peak = oamv[i]
+                dd = (oamv[i] / peak - 1) * 100
+                if dd <= exit_dd:
+                    raw.append((start, pd.Timestamp(dates[i])))
+                    start = None
+                    peak = None
+
+        raw = [(s, e) for s, e in raw if s >= pd.Timestamp('2023-01-01')]
+
+        bands = []
+        if raw:
+            bands = [raw[0]]
+            for bs, be in raw[1:]:
+                if (bs - bands[-1][1]).days <= merge_gap:
+                    bands[-1] = (bands[-1][0], max(bands[-1][1], be))
+                else:
+                    bands.append((bs, be))
+
+        self.raw_bands = raw
+        self.bands = bands
+        self.open_band_start = start
+        self.open_band_peak = peak
+
+    def refresh(self, strategy=None):
+        if strategy:
+            self.strategy.update(strategy)
+        try:
+            for i in range(3):
+                try:
+                    df_new = ak.stock_zh_index_hist_csindex(symbol='000985', start_date='20200101', end_date='20261231')
+                    df_new = df_new.rename(columns={'日期': 'date', '成交金额': 'amount_yi'})
+                    df_new['date'] = pd.to_datetime(df_new['date'])
+                    df_new = df_new.sort_values('date').reset_index(drop=True)
+                    self.df = df_new
+                    self.last_fetch_date = self.df['date'].max()
+                    break
+                except:
+                    time.sleep(5)
+            self._compute()
+            self._detect()
+        except:
+            pass
+        return self.get_status()
+
+    def get_band_return(self, s, e, metric="etf"):
+        if metric == "oamv":
+            idx_s = self.df['date'].searchsorted(s)
+            idx_e = self.df['date'].searchsorted(e)
+            if 0 <= idx_s < len(self.oamv) and 0 <= idx_e < len(self.oamv):
+                return (self.oamv[idx_e] / self.oamv[idx_s] - 1) * 100
+            return None
+        src = {"sh": self.sh, "sz": self.sz, "etf": self.etf}.get(metric)
+        if src is None or len(src) == 0:
+            return None
+        col = 'close' if metric in ('sz', 'etf') else '收盘'
+        if col not in src.columns:
+            return None
+        s_close = src[col][src.index <= s]
+        e_close = src[col][src.index <= e]
+        if len(s_close) and len(e_close):
+            return (e_close.iloc[-1] / s_close.iloc[-1] - 1) * 100
+        return None
+
+    def get_status(self):
+        in_band = self.open_band_start is not None
+        now = self.df['date'].max()
+        oamv_now = self.oamv[-1]
+        oamv_pct_now = self.oamv_pct[-1]
+
+        result = {
+            "in_band": in_band,
+            "oamv_value": oamv_now,
+            "oamv_pct": oamv_pct_now,
+            "last_date": now,
+            "bands": [],
+        }
+
+        if in_band:
+            start = pd.Timestamp(self.open_band_start)
+            peak = self.open_band_peak
+            idx = self.df['date'].searchsorted(start)
+            oamv_start = self.oamv[idx] if 0 <= idx < len(self.oamv) else None
+            peak_pct = (peak / oamv_start - 1) * 100 if oamv_start else 0
+            dd = (oamv_now / peak - 1) * 100
+            result["band_start"] = start
+            result["band_days"] = (now - start).days
+            result["peak_gain"] = peak_pct
+            result["drawdown"] = dd
+            result["exit_threshold"] = self.strategy['exit_dd']
+
+        for s, e in reversed(self.bands):
+            result["bands"].append({"start": s, "end": e, "days": (e - s).days})
+
+        return result

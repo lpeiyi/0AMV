@@ -1,0 +1,22 @@
+# 编译输出
+*.exe
+*.dll
+*.pdb
+*.obj
+*.lib
+*.exp
+__pycache__/
+*.pyc
+*.pyo
+
+# IDE
+.vs/
+.idea/
+*.user
+*.suo
+.vscode/
+
+# 临时文件
+*.log
+*.tmp
+temp/

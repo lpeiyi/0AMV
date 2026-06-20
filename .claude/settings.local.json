@@ -1,0 +1,16 @@
+{
+  "permissions": {
+    "allow": [
+      "PowerShell(git config user.name)",
+      "PowerShell(git config user.email)",
+      "PowerShell(Get-ChildItem -Recurse -File | Where-Object { $_.Length -gt 1MB } | Select-Object @{N=\"Size\\(MB\\)\";E={[math]::Round\\($_.Length/1MB,2\\)}}, FullName)",
+      "PowerShell(winget install --id Git.Git -e --source winget --accept-package-agreements)",
+      "PowerShell($url = \"https://github.com/git-for-windows/git/releases/download/v2.54.0.windows.1/Git-2.54.0-64-bit.exe\" ; $out = \"$env:TEMP\\\\Git-2.54.0-64-bit.exe\" ; if \\(Test-Path $out\\) { Remove-Item $out } ; Invoke-WebRequest -Uri $url -OutFile $out ; Write-Output \"下载完成: $out\")",
+      "PowerShell(Start-Process -FilePath \"$env:TEMP\\\\Git-2.54.0-64-bit.exe\" -ArgumentList \"/VERYSILENT /NORESTART /DIR=D:\\\\app\\\\Git\" -Wait -NoNewWindow; Write-Output \"安装完成，退出代码: $LASTEXITCODE\")",
+      "PowerShell(if \\(Test-Path \"D:\\\\app\\\\Git\\\\bin\\\\git.exe\"\\) { Write-Output \"Git 已安装\"; $env:PATH = \"D:\\\\app\\\\Git\\\\bin;$env:PATH\"; git --version } else { Write-Output \"Git 未找到\" })",
+      "PowerShell($env:PATH = \"D:\\\\app\\\\Git\\\\bin;$env:PATH\"; git config --global user.name \"lpeiyi\"; git config --global user.email \"lpeiyi@yeah.net\"; Set-Location \"G:\\\\products\\\\指南针股票app活跃市值指数0AMV\"; git init; Write-Output \"---\"; git config user.name; git config user.email)",
+      "PowerShell($env:PATH = \"D:\\\\app\\\\Git\\\\bin;$env:PATH\"; Set-Location \"G:\\\\products\\\\指南针股票app活跃市值指数0AMV\"; git add -A; git status)",
+      "PowerShell($env:PATH = \"D:\\\\app\\\\Git\\\\bin;$env:PATH\"; git config --global --add safe.directory \"G:/products/指南针股票app活跃市值指数0AMV\")"
+    ]
+  }
+}
