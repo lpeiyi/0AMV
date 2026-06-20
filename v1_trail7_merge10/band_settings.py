@@ -2,7 +2,7 @@ import os
 from functools import partial
 from PySide6.QtCore import Qt, QSize, QDate, QTimer
 from PySide6.QtGui import QColor, QFontDatabase, QKeySequence
-from PySide6.QtWidgets import QWidget, QDialog, QVBoxLayout, QHBoxLayout, QGridLayout, QTabWidget, QPushButton, QSlider, QGroupBox, QLabel, QColorDialog, QComboBox, QAbstractItemView, QCheckBox, QListWidget, QListWidgetItem, QKeySequenceEdit, QLineEdit, QFileDialog, QDateEdit, QMessageBox
+from PySide6.QtWidgets import QWidget, QDialog, QVBoxLayout, QHBoxLayout, QGridLayout, QTabWidget, QPushButton, QSlider, QGroupBox, QLabel, QColorDialog, QComboBox, QAbstractItemView, QCheckBox, QTableWidget, QTableWidgetItem, QHeaderView, QKeySequenceEdit, QLineEdit, QFileDialog, QDateEdit, QMessageBox
 
 from band_panel import BandPanel
 from band_stocks import ALL_HEADERS
@@ -33,17 +33,26 @@ class SettingsDialog(QDialog):
         g_codes = QGroupBox("自选列表")
         g_codes.setContentsMargins(3, 12, 3, 6)
         lay_codes = QHBoxLayout(g_codes)
-        self.list_codes = QListWidget()
+        self.list_codes = QTableWidget(0, 2)
+        self.list_codes.setHorizontalHeaderLabels(["代码", "名称"])
+        self.list_codes.horizontalHeader().setStretchLastSection(True)
         self.list_codes.setEditTriggers(QAbstractItemView.DoubleClicked | QAbstractItemView.SelectedClicked | QAbstractItemView.EditKeyPressed)
         self.list_codes.setMinimumWidth(260)
+        self.list_codes.setSelectionBehavior(QAbstractItemView.SelectRows)
+        self.list_codes.setSelectionMode(QAbstractItemView.SingleSelection)
         for c in self.panel.codes:
+            row = self.list_codes.rowCount()
+            self.list_codes.insertRow(row)
+            it0 = QTableWidgetItem(c)
+            it0.setFlags(Qt.ItemIsEnabled | Qt.ItemIsSelectable | Qt.ItemIsEditable | Qt.ItemIsUserCheckable)
+            it0.setCheckState(Qt.Checked if c in getattr(self.panel, 'checked_codes', []) else Qt.Unchecked)
+            it0.setData(Qt.UserRole, c)
+            self.list_codes.setItem(row, 0, it0)
             name = self.panel.get_code_name(c)
-            label = f"{c} - {name}" if name != c else c
-            it = QListWidgetItem(label)
-            it.setFlags(it.flags() | Qt.ItemIsUserCheckable | Qt.ItemIsEditable | Qt.ItemIsSelectable | Qt.ItemIsEnabled)
-            it.setCheckState(Qt.Checked if c in getattr(self.panel, 'checked_codes', []) else Qt.Unchecked)
-            it.setData(Qt.UserRole, c)
-            self.list_codes.addItem(it)
+            name_text = name if name != c else "更新中..."
+            it1 = QTableWidgetItem(name_text)
+            it1.setFlags(Qt.ItemIsEnabled | Qt.ItemIsSelectable)
+            self.list_codes.setItem(row, 1, it1)
         btn_col = QVBoxLayout()
         self.btn_add = QPushButton("添加"); self.btn_add.setFixedWidth(60)
         self.btn_del = QPushButton("删除"); self.btn_del.setFixedWidth(60)
@@ -273,7 +282,7 @@ class SettingsDialog(QDialog):
         self.slider_exit = QSlider(Qt.Horizontal)
         self.slider_exit.setRange(20, 200)
         self.slider_exit.setValue(int(abs(strat["exit_dd"]) * 10))
-        self.lbl_exit = QLabel(f"{strat['exit_dd']:.0f}%")
+        self.lbl_exit = QLabel(f"{strat['exit_dd']:.1f}%")
         self.lbl_exit.setFixedWidth(45)
         self.btn_exit_sub = QPushButton("－")
         self.btn_exit_sub.setFixedWidth(24)
@@ -320,6 +329,20 @@ class SettingsDialog(QDialog):
         gl_s.addWidget(self.cmb_sma_m, 4, 1)
 
         v3.addWidget(g_strat)
+
+        g_info = QGroupBox("参数说明")
+        g_info.setContentsMargins(3, 12, 3, 6)
+        info_text = QLabel(
+            "入场阈值：0AMV 一天涨了 ≥ 此百分比就入场买入（默认 +3%）\n"
+            "退出回撤：入场后涨到最高点又跌回 ≤ 此百分比就卖出（默认 -7%）\n"
+            "合并间隔：两次买卖之间相隔 ≤ 此天数，视为同一轮操作合并计算（默认 10天）\n"
+            "SMA N：看过去多少天的成交额来算平均值，N 越大曲线越平滑（默认 10天）\n"
+            "SMA M：最近一天的成交额占多少比重，M 越大对最新行情越敏感（默认 2）"
+        )
+        info_text.setWordWrap(True)
+        vi = QVBoxLayout(g_info)
+        vi.addWidget(info_text)
+        v3.addWidget(g_info)
         v3.addStretch()
         self.tabs.addTab(tab3, "策略参数")
 
@@ -449,6 +472,10 @@ class SettingsDialog(QDialog):
         self.cmb_band_metric.currentIndexChanged.connect(self._on_band_metric_changed)
         self.btn_export.clicked.connect(self._on_export_bands)
 
+        self._name_refresh_timer = QTimer(self)
+        self._name_refresh_timer.timeout.connect(self._refresh_names)
+        self._name_refresh_timer.start(5000)
+
     def _apply_tab_size(self, idx):
         size = self.tab_sizes.get(idx, QSize(560, 480))
         self.setMinimumSize(max(560, size.width()), 400)
@@ -459,69 +486,118 @@ class SettingsDialog(QDialog):
         from band_stocks import normalize_code
         codes = []
         seen = set()
-        for i in range(self.list_codes.count()):
-            it = self.list_codes.item(i)
-            txt = it.text()
-            raw = it.data(Qt.UserRole) or txt
-            norm = normalize_code(raw)
+        for row in range(self.list_codes.rowCount()):
+            it0 = self.list_codes.item(row, 0)
+            if it0 is None:
+                continue
+            txt = it0.text()
+            raw = it0.data(Qt.UserRole) or txt
+            if txt != raw:
+                norm = normalize_code(txt)
+                if norm:
+                    self.list_codes.blockSignals(True)
+                    it0.setData(Qt.UserRole, norm)
+                    if it0.text() != norm:
+                        it0.setText(norm)
+                    self.list_codes.blockSignals(False)
+                    raw = norm
+            else:
+                norm = normalize_code(raw)
             if norm:
                 if norm not in seen:
                     seen.add(norm)
                     codes.append(norm)
                 if raw != norm:
                     self.list_codes.blockSignals(True)
-                    it.setData(Qt.UserRole, norm)
+                    it0.setData(Qt.UserRole, norm)
+                    if it0.text() != norm:
+                        it0.setText(norm)
                     self.list_codes.blockSignals(False)
             else:
-                it = self.list_codes.item(i)
-                prev = it.data(Qt.UserRole)
+                prev = it0.data(Qt.UserRole)
                 if prev:
                     self.list_codes.blockSignals(True)
-                    it.setText(prev)
+                    it0.setText(prev)
                     self.list_codes.blockSignals(False)
                 else:
-                    self.list_codes.takeItem(i)
+                    self.list_codes.removeRow(row)
                     return self._collect_codes()
         return codes
 
-    def _on_codes_changed(self, _):
+    def _update_name_for_row(self, row):
+        it0 = self.list_codes.item(row, 0)
+        it1 = self.list_codes.item(row, 1)
+        if it0 is None or it1 is None:
+            return
+        code = it0.data(Qt.UserRole) or it0.text()
+        name = self.panel.get_code_name(code)
+        new_name = name if name != code else "更新中..."
+        if it1.text() != new_name:
+            self.list_codes.blockSignals(True)
+            it1.setText(new_name)
+            self.list_codes.blockSignals(False)
+
+    def _refresh_names(self):
+        for row in range(self.list_codes.rowCount()):
+            it1 = self.list_codes.item(row, 1)
+            if it1 and it1.text() == "更新中...":
+                self._update_name_for_row(row)
+
+    def _on_codes_changed(self, item):
         codes = self._collect_codes()
         self.panel.set_codes(codes)
-        checked = [self.list_codes.item(i).text().split()[0] for i in range(self.list_codes.count()) if self.list_codes.item(i).checkState() == Qt.Checked]
+        checked = [self.list_codes.item(i, 0).data(Qt.UserRole) for i in range(self.list_codes.rowCount()) if self.list_codes.item(i, 0).checkState() == Qt.Checked]
         self.panel.set_checked_codes(checked)
+        if item and item.column() == 0:
+            self._update_name_for_row(item.row())
         self._refresh_band_metric_combo()
         self._refresh_export_code_combo()
 
     def _add_code(self):
-        it = QListWidgetItem("sh000001")
-        it.setFlags(it.flags() | Qt.ItemIsUserCheckable | Qt.ItemIsEditable | Qt.ItemIsSelectable | Qt.ItemIsEnabled)
-        it.setCheckState(Qt.Unchecked)
-        it.setData(Qt.UserRole, "sh000001")
-        self.list_codes.addItem(it)
-        self.list_codes.setCurrentItem(it)
-        self.list_codes.editItem(it)
-        self._on_codes_changed(it)
+        c = "sh000001"
+        row = self.list_codes.rowCount()
+        self.list_codes.insertRow(row)
+        it0 = QTableWidgetItem(c)
+        it0.setFlags(Qt.ItemIsEnabled | Qt.ItemIsSelectable | Qt.ItemIsEditable | Qt.ItemIsUserCheckable)
+        it0.setCheckState(Qt.Unchecked)
+        it0.setData(Qt.UserRole, c)
+        self.list_codes.setItem(row, 0, it0)
+        name = self.panel.get_code_name(c)
+        name_text = name if name != c else "更新中..."
+        it1 = QTableWidgetItem(name_text)
+        it1.setFlags(Qt.ItemIsEnabled | Qt.ItemIsSelectable)
+        self.list_codes.setItem(row, 1, it1)
+        self.list_codes.setCurrentCell(row, 0)
+        self.list_codes.edit(self.list_codes.model().index(row, 0))
 
     def _del_code(self):
         row = self.list_codes.currentRow()
         if row >= 0:
-            self.list_codes.takeItem(row)
+            self.list_codes.removeRow(row)
             self._on_codes_changed(None)
 
     def _move_up(self):
         row = self.list_codes.currentRow()
         if row > 0:
-            it = self.list_codes.takeItem(row)
-            self.list_codes.insertItem(row - 1, it)
-            self.list_codes.setCurrentRow(row - 1)
+            items0 = self.list_codes.takeItem(row, 0)
+            items1 = self.list_codes.takeItem(row, 1)
+            self.list_codes.removeRow(row)
+            self.list_codes.insertRow(row - 1)
+            self.list_codes.setItem(row - 1, 0, items0)
+            self.list_codes.setItem(row - 1, 1, items1)
+            self.list_codes.setCurrentCell(row - 1, 0)
             self._on_codes_changed(None)
 
     def _move_down(self):
         row = self.list_codes.currentRow()
-        if 0 <= row < self.list_codes.count() - 1:
-            it = self.list_codes.takeItem(row)
-            self.list_codes.insertItem(row + 1, it)
-            self.list_codes.setCurrentRow(row + 1)
+        if 0 <= row < self.list_codes.rowCount() - 1:
+            items0 = self.list_codes.takeItem(row, 0)
+            items1 = self.list_codes.takeItem(row, 1)
+            self.list_codes.removeRow(row)
+            self.list_codes.insertRow(row + 1)
+            self.list_codes.setItem(row + 1, 0, items0)
+            self.list_codes.setItem(row + 1, 1, items1)
+            self.list_codes.setCurrentCell(row + 1, 0)
             self._on_codes_changed(None)
 
     def _on_interval_changed(self, idx):
@@ -577,20 +653,33 @@ class SettingsDialog(QDialog):
         end_ts = pd.Timestamp(end_dt)
         engine = self.panel.engine
         rows = []
+        cumul = 1.0
         for s, e in engine.bands:
             if e < start_ts or s > end_ts:
                 continue
             ret = engine.get_stock_band_return(code, s, e)
-            ret_str = f"{ret:+.2f}" if ret is not None else "N/A"
+            ret_str = f"{ret:+.2f}%" if ret is not None else "N/A"
             rows.append([s.strftime('%Y-%m-%d'), e.strftime('%Y-%m-%d'), (e - s).days, ret_str])
+            if ret is not None:
+                cumul *= (1 + ret / 100)
         if not rows:
             QMessageBox.information(self, "提示", "所选时间范围内无波段数据")
             return
+        total_ret = (cumul - 1) * 100
+        n_years = (end_ts - start_ts).days / 365.25
+        annualized = ((cumul ** (1 / n_years)) - 1) * 100 if n_years > 0 else 0.0
+        rows.append([])
+        rows.append(["累计收益", f"{total_ret:+.2f}%"])
+        rows.append(["年化收益", f"{annualized:+.2f}%"])
+        rows.append(["复利因子", f"{cumul:.4f}"])
         cache_dir = os.path.dirname(engine.cache_path) if engine.cache_path else ""
         if not cache_dir:
             cache_dir = os.path.join(os.getenv("APPDATA", ""), "0AMVMonitor")
             os.makedirs(cache_dir, exist_ok=True)
-        filename = f"0amv_returns_{code}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv"
+        date_str = datetime.now().strftime('%Y%m%d_%H%M%S')
+        start_str = start_dt.strftime('%Y%m%d')
+        end_str = end_dt.strftime('%Y%m%d')
+        filename = f"0amv_returns_{code}_{start_str}_{end_str}.csv"
         filepath = os.path.join(cache_dir, filename)
         with open(filepath, 'w', newline='', encoding='utf-8-sig') as f:
             writer = csv.writer(f)
@@ -649,7 +738,7 @@ class SettingsDialog(QDialog):
 
     def _on_strat_exit_label(self, v):
         val = -v / 10.0
-        self.lbl_exit.setText(f"{val:.0f}%")
+        self.lbl_exit.setText(f"{val:.1f}%")
         self.panel.engine.strategy["exit_dd"] = val
 
     def _on_strat_exit_apply(self):
@@ -682,7 +771,7 @@ class SettingsDialog(QDialog):
     def _do_refresh_strategy(self):
         self.panel.engine._compute()
         self.panel.engine._detect()
-        self.panel._refresh_engine()
+        self.panel._refresh_engine(force_fetch=False)
 
     def _on_hotkey(self):
         hk = self.edit_hotkey.keySequence().toString()

@@ -49,9 +49,10 @@ class BandApp(QApplication):
         self.win.set_on_change(self.save_now)
         self.win.set_open_settings_callback(self.open_settings)
 
-        icon = self.style().standardIcon(QStyle.SP_ComputerIcon)
-        self.setWindowIcon(icon)
-        self.tray = QSystemTrayIcon(icon, self)
+        ico_path = os.path.join(sys._MEIPASS, '0AMV.ico') if getattr(sys, 'frozen', False) else os.path.join(os.path.dirname(__file__), '0AMV.ico')
+        app_icon = QIcon(ico_path) if os.path.isfile(ico_path) else self.style().standardIcon(QStyle.SP_ComputerIcon)
+        self.setWindowIcon(app_icon)
+        self.tray = QSystemTrayIcon(app_icon, self)
         self.tray.setToolTip(APP_NAME)
         menu = QMenu()
         menu.addAction(QAction("显示/隐藏", self, triggered=self.toggle_win))

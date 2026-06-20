@@ -12,6 +12,7 @@ class BandEngine:
         self.open_band_start = None
         self.open_band_peak = None
         self.last_fetch_date = None
+        self.bear_market_start = None
 
         self.sh = None
         self.sz = None
@@ -40,6 +41,9 @@ class BandEngine:
             self.open_band_start = data.get("open_band_start")
             self.open_band_peak = data.get("open_band_peak")
             self.last_fetch_date = data["fetch_date"]
+            self.bear_market_start = data.get("bear_market_start")
+            if self.bear_market_start is None and self.bands:
+                self.bear_market_start = self.bands[-1][1]
             if data.get("version", 1) < 4:
                 self._stock_band_cache = {}
             else:
@@ -66,6 +70,7 @@ class BandEngine:
                     "raw_bands": self.raw_bands,
                     "open_band_start": self.open_band_start,
                     "open_band_peak": self.open_band_peak,
+                    "bear_market_start": self.bear_market_start,
                     "stock_band_cache": self._stock_band_cache,
                 }, f)
         except Exception:
@@ -193,6 +198,8 @@ class BandEngine:
                     time.sleep(5)
             self._compute()
             self._detect()
+            if self.bands:
+                self.bear_market_start = self.bands[-1][1]
         except:
             pass
         return self.get_status()

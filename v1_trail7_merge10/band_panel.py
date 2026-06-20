@@ -31,7 +31,7 @@ class BandPanel(QWidget):
         self.fg = QColor(cfg.get("fg", "#FFFFFF"))
         bg = cfg.get("bg", {"r": 0, "g": 0, "b": 0, "a": 191})
         self.bg = QColor(bg["r"], bg["g"], bg["b"], bg["a"])
-        self.default_color = bool(cfg.get("default_color", True))
+        self.default_color = bool(cfg.get("default_color", False))
         self.opacity_pct = int(cfg.get("opacity_pct", 90))
         self.header_visible = bool(cfg.get("header_visible", False))
         self.grid_visible = bool(cfg.get("grid_visible", False))
@@ -384,14 +384,14 @@ class BandPanel(QWidget):
                 f'<span style="font-size:{font_pt}pt;">'
                 f'0AMV <b>{status["oamv_value"]:,.0f}亿</b>  '
                 f'峰值 <b style="color:#dd2100;">+{peak:.1f}%</b>  '
-                f'回撤 <b style="color:{"#ff6600" if dd < exit_th * 0.7 else "#dd2100" if dd < exit_th * 0.9 else "#ffcc00"};">{dd:.1f}%</b> / {exit_th:.0f}%'
+                f'回撤 <b style="color:{"#ff6600" if dd < exit_th * 0.7 else "#dd2100" if dd < exit_th * 0.9 else "#ffcc00"};">{dd:.1f}%</b> / {exit_th:.1f}%'
                 f'</span>'
             )
         else:
-            if status["bands"]:
-                last_end = status["bands"][-1]["end"]
-                bear_days = (status["last_date"] - last_end).days
-                date_str = f'{last_end.date()}起 ({bear_days}天)'
+            bear_start = self.engine.bear_market_start
+            if bear_start is not None:
+                bear_days = (status["last_date"] - bear_start).days
+                date_str = f'{bear_start.date()}起 ({bear_days}天)'
             else:
                 date_str = f'{status["last_date"].date()}起'
             self.status_label.setText(
@@ -471,6 +471,9 @@ class BandPanel(QWidget):
         metric_key = BAND_RET_METRICS.get(self.band_return_metric, "etf")
         if status["in_band"]:
             start = status["band_start"]
+            end = status["last_date"]
+        elif self.engine.bear_market_start is not None:
+            start = self.engine.bear_market_start
             end = status["last_date"]
         elif status["bands"]:
             last = status["bands"][-1]

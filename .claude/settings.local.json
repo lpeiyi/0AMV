@@ -11,7 +11,26 @@
       "PowerShell($env:PATH = \"D:\\\\app\\\\Git\\\\bin;$env:PATH\"; git config --global user.name \"lpeiyi\"; git config --global user.email \"lpeiyi@yeah.net\"; Set-Location \"G:\\\\products\\\\指南针股票app活跃市值指数0AMV\"; git init; Write-Output \"---\"; git config user.name; git config user.email)",
       "PowerShell($env:PATH = \"D:\\\\app\\\\Git\\\\bin;$env:PATH\"; Set-Location \"G:\\\\products\\\\指南针股票app活跃市值指数0AMV\"; git add -A; git status)",
       "PowerShell($env:PATH = \"D:\\\\app\\\\Git\\\\bin;$env:PATH\"; git config --global --add safe.directory \"G:/products/指南针股票app活跃市值指数0AMV\")",
-      "PowerShell($env:PATH = \"D:\\\\app\\\\Git\\\\bin;$env:PATH\"; Set-Location \"G:\\\\products\\\\指南针股票app活跃市值指数0AMV\"; git remote add origin https://github.com/lpeiyi/0AMV.git; git push -u origin master)"
+      "PowerShell($env:PATH = \"D:\\\\app\\\\Git\\\\bin;$env:PATH\"; Set-Location \"G:\\\\products\\\\指南针股票app活跃市值指数0AMV\"; git remote add origin https://github.com/lpeiyi/0AMV.git; git push -u origin master)",
+      "Bash(python -c \"import akshare; print\\(akshare.__file__.replace\\('__init__.py', 'file_fold'\\)\\)\")",
+      "Bash(pip show *)",
+      "Bash(python -m PyInstaller --noconsole --onefile --name 0AMVMonitor --distpath dist --add-data \"C:/Users/peiyilu/AppData/Local/Programs/Python/Python312/Lib/site-packages/akshare/file_fold;akshare/file_fold\" --icon 0AMV.ico band_monitor.py)",
+      "Bash(cp \"g:/products/指南针股票app活跃市值指数0AMV/v1_trail7_merge10/0AMV.ico\" \"/c/temp/0AMV.ico\")",
+      "Bash(mkdir -p /c/temp)",
+      "Bash(python -m PyInstaller --noconsole --onefile --name 0AMVMonitor --distpath dist --add-data \"C:/Users/peiyilu/AppData/Local/Programs/Python/Python312/Lib/site-packages/akshare/file_fold;akshare/file_fold\" --icon \"C:/temp/0AMV.ico\" band_monitor.py)",
+      "Bash(# 找到 rcedit（PyInstaller 自带） *)",
+      "Read(//c/Users/peiyilu/AppData/Local/Programs/Python/Python312/Lib/site-packages/PyInstaller/**)",
+      "Bash(pkill rcedit *)",
+      "Bash(curl -sL \"https://github.com/electron/rebuild/releases/download/v3.6.1/rcedit-x64.exe\" -o /c/temp/rcedit.exe)",
+      "Bash(/c/temp/rcedit.exe \"g:/products/指南针股票app活跃市值指数0AMV/v1_trail7_merge10/dist/0AMVMonitor.exe\" --set-icon \"g:/products/指南针股票app活跃市值指数0AMV/v1_trail7_merge10/0AMV.ico\")",
+      "Read(//c/temp/**)",
+      "Bash(xxd)",
+      "Bash(curl -sL \"https://github.com/electron/rcedit/releases/download/v2.3.0/rcedit-x64.exe\" -o /c/temp/rcedit.exe)",
+      "Read(//c/Users/peiyilu/AppData/Local/Programs/Python/Python312/**)",
+      "Read(//c/Users/peiyilu/**)",
+      "Bash(rm -rf build/0AMVMonitor dist/0AMVMonitor.exe 0AMVMonitor.spec __pycache__)",
+      "Bash(python -m PyInstaller --noconsole --onefile --name 0AMVMonitor --distpath dist --add-data \"C:/Users/peiyilu/AppData/Local/Programs/Python/Python312/Lib/site-packages/akshare/file_fold;akshare/file_fold\" --icon \"C:/Users/peiyilu/AppData/Local/Temp/0AMV_bmp.ico\" band_monitor.py)",
+      "Bash(python -m PyInstaller --noconsole --onefile --name 0AMVMonitor --distpath dist --add-data \"C:/Users/peiyilu/AppData/Local/Programs/Python/Python312/Lib/site-packages/akshare/file_fold;akshare/file_fold\" --add-data \"0AMV.ico;.\" --icon \"C:/Users/peiyilu/AppData/Local/Temp/0AMV_bmp.ico\" band_monitor.py)"
     ]
   }
 }
