@@ -1,12 +1,9 @@
-import akshare as ak
-import pandas as pd
-import numpy as np
-import time
+import os, time
 
 BAND_RET_METRICS = {"159915": "etf", "上证指数": "sh", "创业板指": "sz", "0AMV": "oamv"}
 
 class BandEngine:
-    def __init__(self):
+    def __init__(self, cache_path=None):
         self.df = None
         self.oamv = None
         self.oamv_pct = None
@@ -21,8 +18,55 @@ class BandEngine:
         self.etf = None
 
         self.strategy = {"entry": 3.0, "exit_dd": -7.0, "merge_gap": 10, "sma_n": 10, "sma_m": 2}
+        self.cache_path = cache_path or os.path.join(os.getenv("APPDATA", ""), "BandMonitor", "cache.pkl")
+
+    def load_cache(self):
+        try:
+            import pickle
+            with open(self.cache_path, "rb") as f:
+                data = pickle.load(f)
+            if data.get("version") != 1:
+                return False
+            self.df = data["df"]
+            self.sh = data.get("sh")
+            self.sz = data.get("sz")
+            self.etf = data.get("etf")
+            self.oamv = data["oamv"]
+            self.oamv_pct = data["oamv_pct"]
+            self.bands = data["bands"]
+            self.raw_bands = data["raw_bands"]
+            self.open_band_start = data.get("open_band_start")
+            self.open_band_peak = data.get("open_band_peak")
+            self.last_fetch_date = data["fetch_date"]
+            return True
+        except Exception:
+            return False
+
+    def save_cache(self):
+        try:
+            import pickle
+            os.makedirs(os.path.dirname(self.cache_path), exist_ok=True)
+            with open(self.cache_path, "wb") as f:
+                pickle.dump({
+                    "version": 1,
+                    "fetch_date": self.last_fetch_date,
+                    "df": self.df,
+                    "sh": self.sh,
+                    "sz": self.sz,
+                    "etf": self.etf,
+                    "oamv": self.oamv,
+                    "oamv_pct": self.oamv_pct,
+                    "bands": self.bands,
+                    "raw_bands": self.raw_bands,
+                    "open_band_start": self.open_band_start,
+                    "open_band_peak": self.open_band_peak,
+                }, f)
+        except Exception:
+            pass
 
     def fetch_all(self):
+        import akshare as ak
+        import pandas as pd
         for i in range(5):
             try:
                 df = ak.stock_zh_index_hist_csindex(symbol='000985', start_date='20100101', end_date='20261231')
@@ -66,8 +110,10 @@ class BandEngine:
 
         self._compute()
         self._detect()
+        self.save_cache()
 
     def _compute(self):
+        import numpy as np
         self.oamv = np.zeros(len(self.df))
         N = self.strategy['sma_n']
         M = self.strategy['sma_m']
@@ -78,6 +124,7 @@ class BandEngine:
         self.oamv_pct = np.insert(self.oamv_pct, 0, 0)
 
     def _detect(self):
+        import pandas as pd
         entry = self.strategy['entry']
         exit_dd = self.strategy['exit_dd']
         merge_gap = self.strategy['merge_gap']
@@ -121,6 +168,8 @@ class BandEngine:
         self.open_band_peak = peak
 
     def refresh(self, strategy=None):
+        import akshare as ak
+        import pandas as pd
         if strategy:
             self.strategy.update(strategy)
         try:
@@ -161,6 +210,7 @@ class BandEngine:
         return None
 
     def get_status(self):
+        import pandas as pd
         in_band = self.open_band_start is not None
         now = self.df['date'].max()
         oamv_now = self.oamv[-1]

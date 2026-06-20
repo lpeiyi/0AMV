@@ -1,6 +1,6 @@
 from functools import partial
-from PySide6.QtCore import Qt, QTimer, Signal
-from PySide6.QtGui import QFont, QAction, QColor
+from PySide6.QtCore import Qt, QSize, QTimer, Signal
+from PySide6.QtGui import QFont, QFontMetrics, QAction, QColor
 from PySide6.QtWidgets import QApplication, QWidget, QMenu, QVBoxLayout, QLabel, QTableView, QHeaderView, QAbstractItemView, QFrame, QListWidget, QListWidgetItem, QHBoxLayout
 
 from band_stocks import QuotesFetcher, QuoteTableModel, ALL_HEADERS
@@ -8,7 +8,7 @@ from band_engine import BandEngine, BAND_RET_METRICS
 
 class BandPanel(QWidget):
     hotkey_triggered = Signal()
-    def __init__(self, cfg: dict, engine: BandEngine):
+    def __init__(self, cfg: dict, engine: BandEngine = None):
         super().__init__()
         self._on_change = lambda: None
         self._open_settings_cb = None
@@ -115,21 +115,28 @@ class BandPanel(QWidget):
         self.hist_list.setFrameShape(QFrame.NoFrame)
         self.hist_list.setFocusPolicy(Qt.NoFocus)
         self.hist_list.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
-        self.hist_list.setVerticalScrollBarPolicy(Qt.ScrollBarAsNeeded)
+        self.hist_list.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
         self.hist_list.setFont(self.font)
+        self.hist_list.setSpacing(0)
+        self.hist_list.setContentsMargins(0, 0, 0, 0)
         self.hist_list.setMaximumHeight(1)
         self.vbox.addWidget(self.hist_list)
 
         self.vbox.addStretch(0)
 
-        # Install event filter on all child widgets EXCEPT hist_list (needs scrolling)
         for w in (self.panel, self.table, self.table.viewport(),
                   self.table.horizontalHeader(), self.table.verticalHeader(),
                   self.status_label, self.metrics_label, self.sep1, self.sep2,
-                  self.hist_title):
+                  self.hist_title, self.hist_list, self.hist_list.viewport()):
             w.installEventFilter(self)
 
         self.apply_style()
+
+        # 先设置加载文字再 _fit()，保证窗口尺寸正确
+        if self.engine is None:
+            fg_hex = self.fg.name()
+            self.status_label.setText(f'<span style="color:{fg_hex};font-size:11pt;">⏳ 加载中… 正在获取数据</span>')
+
         self._fit()
 
         scr = QApplication.primaryScreen().availableGeometry()
@@ -147,15 +154,25 @@ class BandPanel(QWidget):
         self.stock_timer = QTimer(self)
         self.stock_timer.setInterval(max(1, self.refresh_seconds) * 1000)
         self.stock_timer.timeout.connect(self._refresh_stocks)
-        self.stock_timer.start()
 
         self.engine_timer = QTimer(self)
         self.engine_timer.setInterval(60000)
         self.engine_timer.timeout.connect(self._refresh_engine)
-        self.engine_timer.start()
 
-        self._refresh_engine()
+        if self.engine is not None:
+            self.stock_timer.start()
+            self.engine_timer.start()
+            self._refresh_engine()
+            self._refresh_stocks()
+
+    def on_engine_ready(self):
+        if self.engine is None:
+            return
         self._refresh_stocks()
+        self._refresh_engine(force_fetch=False)
+        self._fit()
+        self.stock_timer.start()
+        self.engine_timer.start()
 
     def set_open_settings_callback(self, fn):
         self._open_settings_cb = fn
@@ -196,6 +213,7 @@ class BandPanel(QWidget):
             "short_code": self.short_code,
             "name_length": self.name_length,
             "b1s1_display": self.b1s1_display,
+            "cache_path": self.engine.cache_path if self.engine else "",
         }
 
     def header_is_visible(self, header):
@@ -315,12 +333,14 @@ class BandPanel(QWidget):
             total_h += self.table.rowHeight(r)
         self.table.setFixedSize(max(1, total_w), max(1, total_h))
 
-        fm_metrics = self.status_label.fontMetrics()
-        line_h = fm_metrics.height() + max(0, self.line_extra_px)
+        item_font = QFont(self.font)
+        item_font.setPointSize(max(6, self.font.pointSize() - 1))
+        fm_item = QFontMetrics(item_font)
+        item_h = fm_item.height() + max(0, self.line_extra_px)
+        self.hist_list.setMaximumHeight(item_h * 3 + 2)
 
-        band_cnt = self.hist_list.count()
-        visible = min(max(band_cnt, 1), 8)
-        self.hist_list.setMaximumHeight(line_h * visible + 6)
+        self.hist_list.setMinimumHeight(1)
+        self.hist_list.setSpacing(0)
 
         self.panel.adjustSize()
         self.resize(self.panel.size())
@@ -335,10 +355,15 @@ class BandPanel(QWidget):
     def _get_visible_headers(self):
         return [h for h in ALL_HEADERS if self.header_is_visible(h)]
 
-    def _refresh_engine(self):
-        try:
-            status = self.engine.refresh()
-        except:
+    def _refresh_engine(self, force_fetch=True):
+        if self.engine is None:
+            return
+        if force_fetch:
+            try:
+                status = self.engine.refresh()
+            except:
+                status = self.engine.get_status()
+        else:
             status = self.engine.get_status()
         self._update_status_bar(status)
         self._update_band_returns(status)
@@ -380,22 +405,28 @@ class BandPanel(QWidget):
         self.hist_list.clear()
         metric_key = BAND_RET_METRICS.get(self.band_return_metric, "etf")
         fg_hex = self.fg.name()
-        for b in status["bands"]:
+        item_font = QFont(self.font)
+        item_font.setPointSize(max(6, self.font.pointSize() - 1))
+        item_h = QFontMetrics(item_font).height() + max(0, self.line_extra_px)
+        max_completed = 2 if status["in_band"] else 3
+        for b in status["bands"][:max_completed]:
             ret = self.engine.get_band_return(b["start"], b["end"], metric_key)
             ret_str = f"+{ret:.2f}%" if ret is not None and ret >= 0 else (f"{ret:.2f}%" if ret is not None else "N/A")
             color = "#dd2100" if ret is not None and ret > 0 else "#019933" if ret is not None and ret < 0 else "#999999"
             text = f'{b["start"].strftime("%Y-%m-%d")} → {b["end"].strftime("%Y-%m-%d")} ({b["days"]}d)  <span style="color:{color};font-weight:600;">{ret_str}</span>'
             item = QListWidgetItem()
+            item.setSizeHint(QSize(0, item_h))
             lbl = QLabel(text, self.hist_list)
-            lbl.setStyleSheet(f"color: {fg_hex if not self.default_color else '#CCCCCC'}; font-size: {self.font.pointSize()-1}pt; background: transparent;")
+            lbl.setStyleSheet(f"color: {fg_hex if not self.default_color else '#CCCCCC'}; font-size: {item_font.pointSize()}pt; background: transparent;")
             self.hist_list.addItem(item)
             self.hist_list.setItemWidget(item, lbl)
 
         if status["in_band"]:
             text = f'🔄 {status["band_start"].strftime("%Y-%m-%d")} → 进行中 ({status["band_days"]}d)'
             item = QListWidgetItem()
+            item.setSizeHint(QSize(0, item_h))
             lbl = QLabel(text, self.hist_list)
-            lbl.setStyleSheet(f"color: #00cc66; font-size: {self.font.pointSize()-1}pt; background: transparent;")
+            lbl.setStyleSheet(f"color: #00cc66; font-size: {item_font.pointSize()}pt; background: transparent;")
             self.hist_list.insertItem(0, item)
             self.hist_list.setItemWidget(item, lbl)
 
@@ -532,6 +563,8 @@ class BandPanel(QWidget):
 
     def set_band_return_metric(self, metric):
         self.band_return_metric = metric
+        if self.engine is None:
+            return
         status = self.engine.get_status()
         self._update_band_history(status)
         self._update_band_returns(status)
@@ -627,6 +660,8 @@ class BandPanel(QWidget):
 
     def eventFilter(self, obj, ev):
         from PySide6.QtCore import QEvent
+        if ev.type() == QEvent.Wheel:
+            return True
         if ev.type() == QEvent.MouseButtonDblClick and hasattr(ev, "button") and ev.button() == Qt.LeftButton:
             self._drag_pos = None
             self.hide()

@@ -10,7 +10,8 @@
       "PowerShell(if \\(Test-Path \"D:\\\\app\\\\Git\\\\bin\\\\git.exe\"\\) { Write-Output \"Git 已安装\"; $env:PATH = \"D:\\\\app\\\\Git\\\\bin;$env:PATH\"; git --version } else { Write-Output \"Git 未找到\" })",
       "PowerShell($env:PATH = \"D:\\\\app\\\\Git\\\\bin;$env:PATH\"; git config --global user.name \"lpeiyi\"; git config --global user.email \"lpeiyi@yeah.net\"; Set-Location \"G:\\\\products\\\\指南针股票app活跃市值指数0AMV\"; git init; Write-Output \"---\"; git config user.name; git config user.email)",
       "PowerShell($env:PATH = \"D:\\\\app\\\\Git\\\\bin;$env:PATH\"; Set-Location \"G:\\\\products\\\\指南针股票app活跃市值指数0AMV\"; git add -A; git status)",
-      "PowerShell($env:PATH = \"D:\\\\app\\\\Git\\\\bin;$env:PATH\"; git config --global --add safe.directory \"G:/products/指南针股票app活跃市值指数0AMV\")"
+      "PowerShell($env:PATH = \"D:\\\\app\\\\Git\\\\bin;$env:PATH\"; git config --global --add safe.directory \"G:/products/指南针股票app活跃市值指数0AMV\")",
+      "PowerShell($env:PATH = \"D:\\\\app\\\\Git\\\\bin;$env:PATH\"; Set-Location \"G:\\\\products\\\\指南针股票app活跃市值指数0AMV\"; git remote add origin https://github.com/lpeiyi/0AMV.git; git push -u origin master)"
     ]
   }
 }

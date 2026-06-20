@@ -1,5 +1,5 @@
 import sys, os, json, ctypes
-from PySide6.QtCore import Qt, QPoint
+from PySide6.QtCore import Qt, QPoint, QTimer, QThread, QObject, Signal
 from PySide6.QtGui import QAction, QIcon
 from PySide6.QtWidgets import QApplication, QSystemTrayIcon, QMenu, QStyle
 import keyboard as kb
@@ -27,6 +27,15 @@ def save_config(cfg):
         json.dump(cfg, f, ensure_ascii=False, indent=2)
     os.replace(tmp, CONFIG_FILE)
 
+class EngineWorker(QObject):
+    finished = Signal()
+    def __init__(self, engine):
+        super().__init__()
+        self.engine = engine
+    def run(self):
+        self.engine.fetch_all()
+        self.finished.emit()
+
 class BandApp(QApplication):
     def __init__(self, argv):
         super().__init__(argv)
@@ -34,18 +43,9 @@ class BandApp(QApplication):
 
         cfg = load_config()
 
-        # Init engine (fetch data + compute bands)
-        self.engine = BandEngine()
-        try:
-            self.engine.fetch_all()
-            engine_cfg = cfg.get("strategy", {})
-            if engine_cfg:
-                self.engine.strategy.update(engine_cfg)
-            self.engine.refresh()
-        except Exception as e:
-            print(f"Engine init error: {e}")
+        self.engine = None
 
-        self.win = BandPanel(cfg, self.engine)
+        self.win = BandPanel(cfg, None)
         self.win.set_on_change(self.save_now)
         self.win.set_open_settings_callback(self.open_settings)
 
@@ -67,15 +67,60 @@ class BandApp(QApplication):
         self.win.raise_()
         self.win.activateWindow()
         self.win.setFocus(Qt.ActiveWindowFocusReason)
-        self.save_now()
+        QApplication.processEvents()
 
-        # Hotkey
+        # Hotkey (独立于 engine，立即注册)
         self._hotkey_registered = []
         try:
             kb.add_hotkey("ctrl+alt+f", self.toggle_win)
             self._hotkey_registered.append("ctrl+alt+f")
         except:
             pass
+
+        # 异步启动 engine 获取数据（不阻塞 UI）
+        QTimer.singleShot(0, self._start_engine)
+
+    def _start_engine(self):
+        cfg = load_config()
+        cache_path = cfg.get("cache_path")
+        engine = BandEngine(cache_path=cache_path)
+        engine_cfg = cfg.get("strategy", {})
+        if engine_cfg:
+            engine.strategy.update(engine_cfg)
+
+        # 尝试加载缓存——命中则秒出真实数据
+        cache_ok = engine.load_cache()
+        # 配置的路径无效时，回退到默认路径
+        if not cache_ok and cache_path:
+            default_path = os.path.join(CONFIG_DIR, "cache.pkl")
+            if default_path != engine.cache_path:
+                engine.cache_path = default_path
+                cache_ok = engine.load_cache()
+
+        if cache_ok:
+            import pandas as pd
+            today = pd.Timestamp.now().normalize()
+            stale_days = (today - engine.last_fetch_date).days if engine.last_fetch_date is not None else 999
+            if stale_days <= 7:
+                self.engine = engine
+                self.win.engine = engine
+                self.win.on_engine_ready()
+                self.save_now()
+
+        # 后台线程始终刷新
+        self._engine_worker = EngineWorker(engine)
+        self._engine_thread = QThread(self)
+        self._engine_worker.moveToThread(self._engine_thread)
+        self._engine_thread.started.connect(self._engine_worker.run)
+        self._engine_worker.finished.connect(self._on_engine_ready)
+        self._engine_worker.finished.connect(self._engine_thread.quit)
+        self._engine_thread.start()
+
+    def _on_engine_ready(self):
+        self.engine = self._engine_worker.engine
+        self.win.engine = self.engine
+        self.win.on_engine_ready()
+        self.save_now()
 
     def _on_tray(self, reason):
         if reason in (QSystemTrayIcon.Trigger, QSystemTrayIcon.DoubleClick):
@@ -111,6 +156,9 @@ class BandApp(QApplication):
                 kb.remove_hotkey(hk)
             except:
                 pass
+        if hasattr(self, "_engine_thread") and self._engine_thread.isRunning():
+            self._engine_thread.quit()
+            self._engine_thread.wait(2000)
         self.tray.hide()
         self.save_now()
         sys.exit(0)
@@ -131,7 +179,8 @@ class BandApp(QApplication):
 
     def save_now(self):
         cfg = self.win.current_config()
-        cfg["strategy"] = dict(self.engine.strategy)
+        if self.engine is not None:
+            cfg["strategy"] = dict(self.engine.strategy)
         hotkey_raw = getattr(self, "_hotkey_registered", ["Ctrl+Alt+F"])
         cfg["hotkey"] = hotkey_raw[0] if hotkey_raw else "Ctrl+Alt+F"
         save_config(cfg)

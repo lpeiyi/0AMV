@@ -1,7 +1,8 @@
+import os
 from functools import partial
 from PySide6.QtCore import Qt, QSize
 from PySide6.QtGui import QColor, QFontDatabase, QKeySequence
-from PySide6.QtWidgets import QWidget, QDialog, QVBoxLayout, QHBoxLayout, QGridLayout, QTabWidget, QPushButton, QSlider, QGroupBox, QLabel, QColorDialog, QComboBox, QAbstractItemView, QCheckBox, QListWidget, QListWidgetItem, QKeySequenceEdit
+from PySide6.QtWidgets import QWidget, QDialog, QVBoxLayout, QHBoxLayout, QGridLayout, QTabWidget, QPushButton, QSlider, QGroupBox, QLabel, QColorDialog, QComboBox, QAbstractItemView, QCheckBox, QListWidget, QListWidgetItem, QKeySequenceEdit, QLineEdit, QFileDialog
 
 from band_panel import BandPanel
 from band_stocks import ALL_HEADERS
@@ -21,7 +22,7 @@ class SettingsDialog(QDialog):
         main.addWidget(self.tabs)
 
         from PySide6.QtWidgets import QScrollArea
-        self.tab_sizes = {0: QSize(340, 320), 1: QSize(480, 500), 2: QSize(360, 350), 3: QSize(340, 280), 4: QSize(340, 220)}
+        self.tab_sizes = {0: QSize(340, 320), 1: QSize(480, 500), 2: QSize(360, 350), 3: QSize(340, 280), 4: QSize(340, 280)}
         self._apply_tab_size(0)
 
         # ---- Tab 0: 自选列表 ----
@@ -304,6 +305,19 @@ class SettingsDialog(QDialog):
         tab4 = QWidget()
         v4 = QVBoxLayout(tab4)
 
+        g_cache = QGroupBox("缓存")
+        g_cache.setContentsMargins(3, 12, 3, 6)
+        gl_cache = QGridLayout(g_cache)
+        gl_cache.addWidget(QLabel("缓存目录:"), 0, 0)
+        self.edit_cache_path = QLineEdit()
+        cache_dir = os.path.dirname(self.panel.engine.cache_path) if self.panel.engine else ""
+        self.edit_cache_path.setText(cache_dir)
+        gl_cache.addWidget(self.edit_cache_path, 0, 1)
+        self.btn_cache_browse = QPushButton("浏览…")
+        self.btn_cache_browse.setFixedWidth(60)
+        gl_cache.addWidget(self.btn_cache_browse, 0, 2)
+        v4.addWidget(g_cache)
+
         g_hk = QGroupBox("快捷键")
         g_hk.setContentsMargins(3, 12, 3, 6)
         gl_hk = QGridLayout(g_hk)
@@ -342,6 +356,8 @@ class SettingsDialog(QDialog):
         self.cmb_sma_n.currentIndexChanged.connect(self._on_strat_sma)
         self.cmb_sma_m.currentIndexChanged.connect(self._on_strat_sma)
         self.edit_hotkey.editingFinished.connect(self._on_hotkey)
+        self.btn_cache_browse.clicked.connect(self._browse_cache)
+        self.edit_cache_path.editingFinished.connect(self._on_cache_path_changed)
         self.tabs.currentChanged.connect(self._apply_tab_size)
         # column visibility
         self.cb_code.toggled.connect(partial(self._on_cb_changed, "代码"))
@@ -525,6 +541,21 @@ class SettingsDialog(QDialog):
                     pass
         except:
             pass
+
+    def _browse_cache(self):
+        cur = self.edit_cache_path.text()
+        d = QFileDialog.getExistingDirectory(self, "选择缓存目录", cur if os.path.isdir(cur) else "")
+        if d:
+            self.edit_cache_path.setText(d)
+            self._on_cache_path_changed()
+
+    def _on_cache_path_changed(self):
+        new_dir = self.edit_cache_path.text().strip()
+        if new_dir and self.panel.engine:
+            new_path = os.path.normpath(os.path.join(new_dir, "cache.pkl"))
+            if new_path != self.panel.engine.cache_path:
+                self.panel.engine.cache_path = new_path
+                self.panel._notify()
 
     def _on_cb_changed(self, header, state):
         self.panel.set_header_flag(header, state)
