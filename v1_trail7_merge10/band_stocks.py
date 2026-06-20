@@ -33,6 +33,10 @@ class QuotesFetcher:
         self.short_code = False
         self.name_length = 0
         self.b1s1_display = "qty"
+        self._code_names = {}
+
+    def code_names(self):
+        return dict(self._code_names)
 
     def get_quotes(self, codes):
         if not codes:
@@ -54,6 +58,7 @@ class QuotesFetcher:
                 continue
             code = heads[2]
             name = parts[0]
+            self._code_names[code] = name
             opening_price = float(parts[1] or 0)
             prev_close = float(parts[2] or 0)
             current_price = float(parts[3] or 0)

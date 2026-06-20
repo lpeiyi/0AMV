@@ -403,17 +403,29 @@ class BandPanel(QWidget):
 
     def _update_band_history(self, status):
         self.hist_list.clear()
-        metric_key = BAND_RET_METRICS.get(self.band_return_metric, "etf")
+        metric_key = BAND_RET_METRICS.get(self.band_return_metric, None)
         fg_hex = self.fg.name()
         item_font = QFont(self.font)
         item_font.setPointSize(max(6, self.font.pointSize() - 1))
         item_h = QFontMetrics(item_font).height() + max(0, self.line_extra_px)
         max_completed = 2 if status["in_band"] else 3
+        needs_defer = False
         for b in status["bands"][:max_completed]:
-            ret = self.engine.get_band_return(b["start"], b["end"], metric_key)
+            if metric_key:
+                ret = self.engine.get_band_return(b["start"], b["end"], metric_key)
+            else:
+                ck = (self.band_return_metric, b["start"], b["end"])
+                if ck in self.engine._stock_band_cache:
+                    ret = self.engine._stock_band_cache[ck]
+                else:
+                    ret = self.engine.get_band_return(b["start"], b["end"], "oamv")
+                    needs_defer = True
+                    text_suffix = ' <span style="color:#999999;font-weight:400;">计算中…</span>'
             ret_str = f"+{ret:.2f}%" if ret is not None and ret >= 0 else (f"{ret:.2f}%" if ret is not None else "N/A")
             color = "#dd2100" if ret is not None and ret > 0 else "#019933" if ret is not None and ret < 0 else "#999999"
             text = f'{b["start"].strftime("%Y-%m-%d")} → {b["end"].strftime("%Y-%m-%d")} ({b["days"]}d)  <span style="color:{color};font-weight:600;">{ret_str}</span>'
+            if not metric_key and ck not in self.engine._stock_band_cache:
+                text += text_suffix
             item = QListWidgetItem()
             item.setSizeHint(QSize(0, item_h))
             lbl = QLabel(text, self.hist_list)
@@ -431,6 +443,22 @@ class BandPanel(QWidget):
             self.hist_list.setItemWidget(item, lbl)
 
         self._fit()
+        if needs_defer:
+            QTimer.singleShot(0, lambda: self._deferred_hist_return(status))
+
+    def _deferred_hist_return(self, status):
+        metric_key = BAND_RET_METRICS.get(self.band_return_metric, None)
+        if metric_key:
+            return
+        max_completed = 2 if status["in_band"] else 3
+        for b in status["bands"][:max_completed]:
+            ck = (self.band_return_metric, b["start"], b["end"])
+            if ck in self.engine._stock_band_cache:
+                continue
+            ret = self.engine.get_stock_band_return(self.band_return_metric, b["start"], b["end"])
+            if ret is not None:
+                self.engine._stock_band_cache[ck] = ret
+        self._update_band_history(status)
 
     def _update_band_returns(self, status):
         self.quote_fetcher.band_returns = {}
@@ -513,6 +541,10 @@ class BandPanel(QWidget):
         proj = [[r[i] for i in h_idx] for r in rows]
         self.model.set_data(proj, headers, signs)
         self._fit()
+
+    def get_code_name(self, code):
+        names = self.quote_fetcher.code_names()
+        return names.get(code, code)
 
     def set_codes(self, codes_list):
         seen = set()
@@ -614,6 +646,9 @@ class BandPanel(QWidget):
         if self.engine is None:
             return
         status = self.engine.get_status()
+        QTimer.singleShot(0, lambda: self._deferred_update_metric(status))
+
+    def _deferred_update_metric(self, status):
         self._update_band_history(status)
         self._update_band_returns(status)
         self._notify()

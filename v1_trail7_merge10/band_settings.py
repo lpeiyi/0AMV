@@ -1,8 +1,8 @@
 import os
 from functools import partial
-from PySide6.QtCore import Qt, QSize
+from PySide6.QtCore import Qt, QSize, QDate
 from PySide6.QtGui import QColor, QFontDatabase, QKeySequence
-from PySide6.QtWidgets import QWidget, QDialog, QVBoxLayout, QHBoxLayout, QGridLayout, QTabWidget, QPushButton, QSlider, QGroupBox, QLabel, QColorDialog, QComboBox, QAbstractItemView, QCheckBox, QListWidget, QListWidgetItem, QKeySequenceEdit, QLineEdit, QFileDialog
+from PySide6.QtWidgets import QWidget, QDialog, QVBoxLayout, QHBoxLayout, QGridLayout, QTabWidget, QPushButton, QSlider, QGroupBox, QLabel, QColorDialog, QComboBox, QAbstractItemView, QCheckBox, QListWidget, QListWidgetItem, QKeySequenceEdit, QLineEdit, QFileDialog, QDateEdit, QMessageBox
 
 from band_panel import BandPanel
 from band_stocks import ALL_HEADERS
@@ -19,10 +19,12 @@ class SettingsDialog(QDialog):
         main.setContentsMargins(8, 8, 8, 8)
         main.setSpacing(8)
         self.tabs = QTabWidget()
+        self.tabs.setElideMode(Qt.ElideNone)
+        self.tabs.setUsesScrollButtons(False)
         main.addWidget(self.tabs)
 
         from PySide6.QtWidgets import QScrollArea
-        self.tab_sizes = {0: QSize(340, 320), 1: QSize(480, 500), 2: QSize(360, 350), 3: QSize(340, 280), 4: QSize(340, 280)}
+        self.tab_sizes = {0: QSize(540, 320), 1: QSize(560, 480), 2: QSize(540, 350), 3: QSize(540, 280), 4: QSize(560, 300), 5: QSize(540, 280)}
         self._apply_tab_size(0)
 
         # ---- Tab 0: 自选列表 ----
@@ -156,15 +158,6 @@ class SettingsDialog(QDialog):
         self.cb_band_ret = QCheckBox("波收益")
         self.cb_band_ret.setChecked(self.panel.band_ret_visible)
         gl_other.addWidget(self.cb_band_ret, 1, 0)
-        gl_flag_band = QHBoxLayout()
-        gl_flag_band.addWidget(QLabel("收益品种:"))
-        self.cmb_band_metric = QComboBox()
-        for m in ["159915", "上证指数", "创业板指", "0AMV"]:
-            self.cmb_band_metric.addItem(m, userData=m)
-        idx_m = self.cmb_band_metric.findData(self.panel.band_return_metric)
-        self.cmb_band_metric.setCurrentIndex(idx_m if idx_m >= 0 else 0)
-        gl_flag_band.addWidget(self.cmb_band_metric)
-        gl_other.addLayout(gl_flag_band, 2, 0, 1, 2)
         gl_flags.addWidget(g_other, 2, 0)
 
         v1.addWidget(g_flags)
@@ -301,9 +294,49 @@ class SettingsDialog(QDialog):
         v3.addStretch()
         self.tabs.addTab(tab3, "策略参数")
 
-        # ---- Tab 4: 常规 ----
+        # ---- Tab 4: 波段 ----
         tab4 = QWidget()
         v4 = QVBoxLayout(tab4)
+
+        g_band_cfg = QGroupBox("历史波段配置")
+        g_band_cfg.setContentsMargins(3, 12, 3, 6)
+        gl_band_cfg = QGridLayout(g_band_cfg)
+        gl_band_cfg.addWidget(QLabel("收益品种:"), 0, 0)
+        self.cmb_band_metric = QComboBox()
+        self.cmb_band_metric.setFixedWidth(160)
+        gl_band_cfg.addWidget(self.cmb_band_metric, 0, 1)
+        self._refresh_band_metric_combo()
+        gl_band_cfg.addWidget(QLabel("(选择后底部历史波段同步更新)"), 1, 0, 1, 2)
+        v4.addWidget(g_band_cfg)
+
+        g_export = QGroupBox("导出波段收益")
+        g_export.setContentsMargins(3, 12, 3, 6)
+        gl_export = QGridLayout(g_export)
+        gl_export.addWidget(QLabel("品种:"), 0, 0)
+        self.cmb_export_code = QComboBox()
+        self.cmb_export_code.setFixedWidth(160)
+        gl_export.addWidget(self.cmb_export_code, 0, 1)
+        self._refresh_export_code_combo()
+        gl_export.addWidget(QLabel("起始日期:"), 1, 0)
+        self.date_export_start = QDateEdit()
+        self.date_export_start.setCalendarPopup(True)
+        self.date_export_start.setDate(QDate.currentDate().addYears(-1))
+        gl_export.addWidget(self.date_export_start, 1, 1)
+        gl_export.addWidget(QLabel("结束日期:"), 2, 0)
+        self.date_export_end = QDateEdit()
+        self.date_export_end.setCalendarPopup(True)
+        self.date_export_end.setDate(QDate.currentDate())
+        gl_export.addWidget(self.date_export_end, 2, 1)
+        self.btn_export = QPushButton("导出 CSV")
+        self.btn_export.setFixedWidth(100)
+        gl_export.addWidget(self.btn_export, 3, 0, 1, 2)
+        v4.addWidget(g_export)
+        v4.addStretch()
+        self.tabs.insertTab(4, tab4, "波段")
+
+        # ---- Tab 5: 常规 ----
+        tab5 = QWidget()
+        v5 = QVBoxLayout(tab5)
 
         g_cache = QGroupBox("缓存")
         g_cache.setContentsMargins(3, 12, 3, 6)
@@ -316,7 +349,7 @@ class SettingsDialog(QDialog):
         self.btn_cache_browse = QPushButton("浏览…")
         self.btn_cache_browse.setFixedWidth(60)
         gl_cache.addWidget(self.btn_cache_browse, 0, 2)
-        v4.addWidget(g_cache)
+        v5.addWidget(g_cache)
 
         g_hk = QGroupBox("快捷键")
         g_hk.setContentsMargins(3, 12, 3, 6)
@@ -327,10 +360,10 @@ class SettingsDialog(QDialog):
         gl_hk.addWidget(self.edit_hotkey, 0, 1)
         self.chk_start = QCheckBox("开机启动")
         self.chk_start.setChecked(False)
-        v4.addWidget(self.chk_start)
-        v4.addWidget(g_hk)
-        v4.addStretch()
-        self.tabs.addTab(tab4, "常规")
+        v5.addWidget(self.chk_start)
+        v5.addWidget(g_hk)
+        v5.addStretch()
+        self.tabs.addTab(tab5, "常规")
 
         # ---- 信号连接 ----
         self.list_codes.itemChanged.connect(self._on_codes_changed)
@@ -339,7 +372,6 @@ class SettingsDialog(QDialog):
         self.btn_up.clicked.connect(self._move_up)
         self.btn_dn.clicked.connect(self._move_down)
         self.cmb_interval.currentIndexChanged.connect(self._on_interval_changed)
-        self.cmb_band_metric.currentIndexChanged.connect(self._on_band_metric_changed)
         self.chk_default_color.toggled.connect(self._on_default_color)
         self.btn_fg.clicked.connect(self._pick_fg)
         self.btn_bg.clicked.connect(self._pick_bg)
@@ -374,14 +406,14 @@ class SettingsDialog(QDialog):
         self.cb_short_code.toggled.connect(self._on_short_code)
         self.cmb_name_len.currentIndexChanged.connect(self._on_name_length)
         self.cmb_b1s1_display.currentIndexChanged.connect(self._on_b1s1_display)
+        self.cmb_band_metric.currentIndexChanged.connect(self._on_band_metric_changed)
+        self.btn_export.clicked.connect(self._on_export_bands)
 
     def _apply_tab_size(self, idx):
-        size = self.tab_sizes.get(idx, QSize(480, 500))
-        if idx == 1:
-            self.setMinimumSize(480, 400)
-            self.resize(480, 500)
-        else:
-            self.setFixedSize(size)
+        size = self.tab_sizes.get(idx, QSize(560, 480))
+        self.setMinimumSize(max(560, size.width()), 400)
+        self.resize(size)
+        self.tabs.setMinimumSize(size.width(), size.height() - 30)
 
     def _collect_codes(self):
         from band_stocks import normalize_code
@@ -417,6 +449,8 @@ class SettingsDialog(QDialog):
         self.panel.set_codes(codes)
         checked = [self.list_codes.item(i).text().split()[0] for i in range(self.list_codes.count()) if self.list_codes.item(i).checkState() == Qt.Checked]
         self.panel.set_checked_codes(checked)
+        self._refresh_band_metric_combo()
+        self._refresh_export_code_combo()
 
     def _add_code(self):
         it = QListWidgetItem("sh000001")
@@ -459,6 +493,68 @@ class SettingsDialog(QDialog):
         val = self.cmb_band_metric.currentData()
         if val:
             self.panel.set_band_return_metric(val)
+
+    def _make_combo_label(self, code):
+        if code == "0AMV":
+            return code
+        name = self.panel.get_code_name(code)
+        return f"{code} - {name}" if name != code else code
+
+    def _refresh_band_metric_combo(self):
+        self.cmb_band_metric.blockSignals(True)
+        current = self.cmb_band_metric.currentData()
+        self.cmb_band_metric.clear()
+        for code in self.panel.checked_codes:
+            lbl = self._make_combo_label(code)
+            self.cmb_band_metric.addItem(lbl, userData=code)
+        self.cmb_band_metric.addItem("0AMV", userData="0AMV")
+        idx = self.cmb_band_metric.findData(current) if current else -1
+        if idx >= 0:
+            self.cmb_band_metric.setCurrentIndex(idx)
+        self.cmb_band_metric.blockSignals(False)
+
+    def _refresh_export_code_combo(self):
+        self.cmb_export_code.blockSignals(True)
+        self.cmb_export_code.clear()
+        for code in self.panel.checked_codes:
+            lbl = self._make_combo_label(code)
+            self.cmb_export_code.addItem(lbl, userData=code)
+        self.cmb_export_code.addItem("0AMV", userData="0AMV")
+        self.cmb_export_code.blockSignals(False)
+
+    def _on_export_bands(self):
+        code = self.cmb_export_code.currentData()
+        if not code:
+            return
+        start_dt = self.date_export_start.date().toPython()
+        end_dt = self.date_export_end.date().toPython()
+        if start_dt >= end_dt:
+            QMessageBox.warning(self, "提示", "起始日期必须早于结束日期")
+            return
+        import csv, os
+        from datetime import datetime
+        engine = self.panel.engine
+        rows = []
+        for s, e in engine.bands:
+            if e < start_dt or s > end_dt:
+                continue
+            ret = engine.get_stock_band_return(code, s, e)
+            ret_str = f"{ret:+.2f}" if ret is not None else "N/A"
+            rows.append([s.strftime('%Y-%m-%d'), e.strftime('%Y-%m-%d'), (e - s).days, ret_str])
+        if not rows:
+            QMessageBox.information(self, "提示", "所选时间范围内无波段数据")
+            return
+        cache_dir = os.path.dirname(engine.cache_path) if engine.cache_path else ""
+        if not cache_dir:
+            cache_dir = os.path.join(os.getenv("APPDATA", ""), "BandMonitor")
+            os.makedirs(cache_dir, exist_ok=True)
+        filename = f"band_returns_{code}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv"
+        filepath = os.path.join(cache_dir, filename)
+        with open(filepath, 'w', newline='', encoding='utf-8-sig') as f:
+            writer = csv.writer(f)
+            writer.writerow(['band_start', 'band_end', 'days', 'return_pct'])
+            writer.writerows(rows)
+        QMessageBox.information(self, "导出完成", f"已保存 {len(rows)} 条记录到:\n{filepath}")
 
     def _on_default_color(self, checked):
         self.btn_fg.setEnabled(not checked)
