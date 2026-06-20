@@ -106,7 +106,7 @@ class BandPanel(QWidget):
         self.vbox.addWidget(self.sep2)
 
         hist_header = QHBoxLayout()
-        self.hist_title = QLabel("历史波段", self.panel)
+        self.hist_title = QLabel(f"历史波段 [{self.band_return_metric}]", self.panel)
         hist_header.addWidget(self.hist_title)
         hist_header.addStretch()
         self.vbox.addLayout(hist_header)
@@ -377,7 +377,7 @@ class BandPanel(QWidget):
             dd = status["drawdown"]
             exit_th = status["exit_threshold"]
             self.status_label.setText(
-                f'<span style="color:#00cc66;font-size:{font_pt+2}pt;font-weight:600;">🟢 多头区间</span>'
+                f'<span style="color:#dd2100;font-size:{font_pt+2}pt;font-weight:600;">🔴 多头区间</span>'
                 f'<span style="font-size:{font_pt}pt;">  {start.date()}起 ({days}天)</span>'
             )
             self.metrics_label.setText(
@@ -389,7 +389,7 @@ class BandPanel(QWidget):
             )
         else:
             self.status_label.setText(
-                f'<span style="color:#999999;font-size:{font_pt+2}pt;font-weight:600;">⚪ 空头区间</span>'
+                f'<span style="color:#00cc66;font-size:{font_pt+2}pt;font-weight:600;">🟢 空头区间</span>'
                 f'<span style="font-size:{font_pt}pt;">  等待信号 ≥ +{self.engine.strategy["entry"]:.1f}%</span>'
             )
             self.metrics_label.setText(
@@ -610,6 +610,7 @@ class BandPanel(QWidget):
 
     def set_band_return_metric(self, metric):
         self.band_return_metric = metric
+        self.hist_title.setText(f"历史波段 [{self.band_return_metric}]")
         if self.engine is None:
             return
         status = self.engine.get_status()
