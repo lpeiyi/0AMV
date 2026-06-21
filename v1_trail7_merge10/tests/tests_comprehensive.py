@@ -258,6 +258,7 @@ class MockPanel:
     header_visible=True; grid_visible=True; b1s1_visible=True
     band_ret_visible=True; b1s1_display='qty'; short_code=False
     name_length=0; default_color=True; fg=None
+    show_band_history=True; band_history_count=3; strategy_busy=False
     def get_code_name(self,c):
         return {'sh000001':'上证指数','sz399006':'创业板指','sz159915':'创业板ETF'}.get(c,c)
     def set_codes(self,c): self.codes=c
@@ -281,6 +282,7 @@ class MockPanel:
     def set_band_return_metric(self,*a): pass
     def _refresh_engine(self,*a): pass
     def _notify(self): pass
+    def show_band_loading(self,*a): pass
 
 panel = MockPanel()
 parent = QWidget()

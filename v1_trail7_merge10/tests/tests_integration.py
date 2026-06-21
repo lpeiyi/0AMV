@@ -44,6 +44,9 @@ class MockPanel:
         self.font = QFont('Microsoft YaHei', 10); self.line_extra_px = 1
         self.engine = MockEngine()
         self.refresh_engine_count = 0
+        self.show_band_history = True
+        self.band_history_count = 3
+        self.strategy_busy = False
     def windowOpacity(self): return 1.0
     def header_is_visible(self, h): return True
     def get_code_name(self, code):
@@ -58,10 +61,22 @@ class MockPanel:
     def set_name_length(self,v): pass
     def set_b1s1_display(self,v): pass
     def set_band_return_metric(self,v): pass
+    def set_show_band_history(self, enabled):
+        self.show_band_history = bool(enabled)
+    def set_band_history_count(self, count):
+        self.band_history_count = max(1, min(10, int(count)))
+    def show_band_loading(self, msg="加载中..."):
+        pass
     def set_codes(self, codes): self.codes = codes[:]
     def set_checked_codes(self, codes): self.checked_codes = codes[:]
     def _refresh_engine(self, force_fetch=True):
         self.refresh_engine_count += 1
+    def _notify(self):
+        pass
+    def _on_change(self):
+        pass
+    def set_on_change(self, cb):
+        self._on_change = cb
     def _update_status_bar(self, status):
         pass
     def _update_band_returns(self, status):
@@ -235,6 +250,7 @@ def test_strat_entry_slider():
     for _ in range(10):
         QCoreApplication.processEvents()
     dlg._on_strat_entry_apply()
+    dlg._strat_timer.timeout.emit()  # 强制去抖定时器立即触发
     for _ in range(10):
         QCoreApplication.processEvents()
     assert panel.engine.compute_count >= 1
@@ -286,6 +302,7 @@ def test_strat_sma_n():
     dlg.cmb_sma_n.setCurrentIndex(idx)
     assert dlg.cmb_sma_n.currentData() == 15, f"currentData={dlg.cmb_sma_n.currentData()}"
     dlg._on_strat_sma()
+    dlg._strat_timer.timeout.emit()  # 强制去抖定时器立即触发
     from PySide6.QtCore import QCoreApplication
     for _ in range(20):
         QCoreApplication.processEvents()
@@ -304,6 +321,7 @@ def test_strat_sma_m():
     assert idx >= 0
     dlg.cmb_sma_m.setCurrentIndex(idx)
     dlg._on_strat_sma()
+    dlg._strat_timer.timeout.emit()  # 强制去抖定时器立即触发
     from PySide6.QtCore import QCoreApplication
     for _ in range(20):
         QCoreApplication.processEvents()
@@ -338,6 +356,145 @@ def test_strat_after_codes():
     results.append(('test_strat_after_codes', True, ''))
     dlg.close()
 
+def test_show_band_history_toggle():
+    """切换显示历史波段 checkbox，验证 panel 属性和 combo 启用状态"""
+    panel = MockPanel()
+    dlg = SettingsDialog(panel, parent)
+    assert dlg.chk_show_band_history.isChecked() == True
+    assert dlg.cmb_band_count.isEnabled() == True
+    dlg.chk_show_band_history.setChecked(False)
+    dlg._on_show_band_history(False)
+    assert panel.show_band_history == False
+    assert dlg.cmb_band_count.isEnabled() == False
+    dlg.chk_show_band_history.setChecked(True)
+    dlg._on_show_band_history(True)
+    assert panel.show_band_history == True
+    assert dlg.cmb_band_count.isEnabled() == True
+    results.append(('test_show_band_history_toggle', True, ''))
+    dlg.close()
+
+def test_band_history_count():
+    """切换显示波段数 combo，验证 panel 属性更新"""
+    panel = MockPanel()
+    dlg = SettingsDialog(panel, parent)
+    idx = dlg.cmb_band_count.findData(5)
+    assert idx >= 0
+    dlg.cmb_band_count.setCurrentIndex(idx)
+    dlg._on_band_count_changed(idx)
+    assert panel.band_history_count == 5
+    idx2 = dlg.cmb_band_count.findData(10)
+    dlg.cmb_band_count.setCurrentIndex(idx2)
+    dlg._on_band_count_changed(idx2)
+    assert panel.band_history_count == 10
+    results.append(('test_band_history_count', True, ''))
+    dlg.close()
+
+def test_band_loading_indicator():
+    """show_band_loading 在 hist_list 中显示加载文字"""
+    from PySide6.QtCore import QCoreApplication
+    panel = MockPanel()
+    dlg = SettingsDialog(panel, parent)
+    panel.show_band_loading("测试加载中...")
+    assert panel.show_band_history == True
+    for _ in range(5):
+        QCoreApplication.processEvents()
+    results.append(('test_band_loading_indicator', True, ''))
+    dlg.close()
+
+def test_cache_dir_change_create():
+    """修改缓存目录：没有旧缓存时，engine.cache_path 更新 + _notify 触发"""
+    import tempfile, os
+    panel = MockPanel()
+    dlg = SettingsDialog(panel, parent)
+    old = panel.engine.cache_path
+    new_dir = tempfile.mkdtemp()
+    dlg.edit_cache_path.setText(new_dir)
+    dlg._on_cache_path_changed()
+    expected = os.path.normpath(os.path.join(new_dir, "cache.pkl"))
+    assert panel.engine.cache_path == expected
+    assert os.path.isdir(os.path.dirname(panel.engine.cache_path))
+    os.rmdir(new_dir)
+    results.append(('test_cache_dir_change_create', True, ''))
+    dlg.close()
+
+def test_cache_dir_move_existing():
+    """修改缓存目录：有旧缓存时，cache.pkl 被移动到新目录，旧文件被删除"""
+    import tempfile, os
+    panel = MockPanel()
+    dlg = SettingsDialog(panel, parent)
+    old_path = panel.engine.cache_path
+    os.makedirs(os.path.dirname(old_path), exist_ok=True)
+    with open(old_path, "w") as f:
+        f.write("test cache data")
+    assert os.path.isfile(old_path)
+    new_dir = tempfile.mkdtemp()
+    dlg.edit_cache_path.setText(new_dir)
+    dlg._on_cache_path_changed()
+    expected = os.path.normpath(os.path.join(new_dir, "cache.pkl"))
+    assert panel.engine.cache_path == expected
+    assert os.path.isfile(expected)
+    assert not os.path.isfile(old_path)
+    with open(expected) as f:
+        assert f.read() == "test cache data"
+    os.remove(expected)
+    os.rmdir(new_dir)
+    results.append(('test_cache_dir_move_existing', True, ''))
+    dlg.close()
+
+def test_cache_dir_same_dir_skip():
+    """修改缓存目录：新旧路径相同时，engine.cache_path 不更新"""
+    panel = MockPanel()
+    dlg = SettingsDialog(panel, parent)
+    old = panel.engine.cache_path
+    same_dir = os.path.dirname(old)
+    dlg.edit_cache_path.setText(same_dir)
+    dlg._on_cache_path_changed()
+    assert panel.engine.cache_path == old
+    results.append(('test_cache_dir_same_dir_skip', True, ''))
+    dlg.close()
+
+def test_strat_busy_locks_controls():
+    """策略刷新进行中时，控件被禁用"""
+    panel = MockPanel()
+    dlg = SettingsDialog(panel, parent)
+    assert dlg.slider_entry.isEnabled()
+    assert dlg.btn_entry_add.isEnabled()
+    assert dlg.cmb_sma_n.isEnabled()
+    dlg._refresh_strategy()
+    assert not dlg.slider_entry.isEnabled()
+    assert not dlg.btn_entry_add.isEnabled()
+    assert not dlg.cmb_sma_n.isEnabled()
+    assert panel.strategy_busy
+    assert "策略计算中" in dlg.lbl_strat_busy.text()
+    dlg._strat_timer.timeout.emit()
+    from PySide6.QtCore import QCoreApplication
+    for _ in range(10):
+        QCoreApplication.processEvents()
+    assert dlg.slider_entry.isEnabled()
+    assert dlg.btn_entry_add.isEnabled()
+    assert dlg.cmb_sma_n.isEnabled()
+    assert not panel.strategy_busy
+    results.append(('test_strat_busy_locks_controls', True, ''))
+    dlg.close()
+
+def test_strat_busy_debounce():
+    """快速多次调用 _refresh_strategy 只触发一次 _do_refresh_strategy"""
+    panel = MockPanel()
+    dlg = SettingsDialog(panel, parent)
+    panel.engine.compute_count = 0
+    panel.engine.detect_count = 0
+    dlg._refresh_strategy()
+    dlg._refresh_strategy()
+    dlg._refresh_strategy()
+    assert dlg._strat_timer.isActive()
+    dlg._strat_timer.timeout.emit()
+    from PySide6.QtCore import QCoreApplication
+    for _ in range(10):
+        QCoreApplication.processEvents()
+    assert panel.engine.compute_count == 1
+    results.append(('test_strat_busy_debounce', True, ''))
+    dlg.close()
+
 def run_all():
     tests = [
         test_add_row, test_three_rows, test_check_rows, test_collect_codes,
@@ -345,6 +502,9 @@ def run_all():
         test_apply_save, test_name_refresh_timer, test_load_from_panel_unknown_code,
         test_strat_entry_slider, test_strat_entry_buttons, test_strat_exit_slider,
         test_strat_merge_slider, test_strat_sma_n, test_strat_sma_m, test_strat_after_codes,
+        test_show_band_history_toggle, test_band_history_count, test_band_loading_indicator,
+        test_cache_dir_change_create, test_cache_dir_move_existing, test_cache_dir_same_dir_skip,
+        test_strat_busy_locks_controls, test_strat_busy_debounce,
     ]
     for t in tests:
         try:

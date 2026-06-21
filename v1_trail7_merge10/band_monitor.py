@@ -91,12 +91,9 @@ class BandApp(QApplication):
 
         # 尝试加载缓存——命中则秒出真实数据
         cache_ok = engine.load_cache()
-        # 配置的路径无效时，回退到默认路径
+        # 配置的路径无效时，确保目录存在
         if not cache_ok and cache_path:
-            default_path = os.path.join(CONFIG_DIR, "cache.pkl")
-            if default_path != engine.cache_path:
-                engine.cache_path = default_path
-                cache_ok = engine.load_cache()
+            os.makedirs(os.path.dirname(engine.cache_path), exist_ok=True)
 
         if cache_ok:
             import pandas as pd

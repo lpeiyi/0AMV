@@ -1,5 +1,5 @@
 from functools import partial
-from PySide6.QtCore import Qt, QSize, QTimer, Signal
+from PySide6.QtCore import Qt, QSize, QTimer, Signal, QCoreApplication
 from PySide6.QtGui import QFont, QFontMetrics, QAction, QColor
 from PySide6.QtWidgets import QApplication, QWidget, QMenu, QVBoxLayout, QLabel, QTableView, QHeaderView, QAbstractItemView, QFrame, QListWidget, QListWidgetItem, QHBoxLayout
 
@@ -52,6 +52,9 @@ class BandPanel(QWidget):
         self.short_code = bool(cfg.get("short_code", False))
         self.name_length = int(cfg.get("name_length", 0))
         self.b1s1_display = cfg.get("b1s1_display", "qty")
+        self.show_band_history = bool(cfg.get("show_band_history", True))
+        self.band_history_count = int(cfg.get("band_history_count", 3))
+        self.strategy_busy = False
 
         self.quote_fetcher = QuotesFetcher()
         self.quote_fetcher.short_code = self.short_code
@@ -164,6 +167,10 @@ class BandPanel(QWidget):
             self.engine_timer.start()
             self._refresh_engine()
             self._refresh_stocks()
+        if not self.show_band_history:
+            self.sep2.hide()
+            self.hist_title.hide()
+            self.hist_list.hide()
 
     def on_engine_ready(self):
         if self.engine is None:
@@ -213,6 +220,8 @@ class BandPanel(QWidget):
             "short_code": self.short_code,
             "name_length": self.name_length,
             "b1s1_display": self.b1s1_display,
+            "show_band_history": self.show_band_history,
+            "band_history_count": self.band_history_count,
             "cache_path": self.engine.cache_path if self.engine else "",
         }
 
@@ -337,7 +346,7 @@ class BandPanel(QWidget):
         item_font.setPointSize(max(6, self.font.pointSize() - 1))
         fm_item = QFontMetrics(item_font)
         item_h = fm_item.height() + max(0, self.line_extra_px)
-        self.hist_list.setMaximumHeight(item_h * 3 + 2)
+        self.hist_list.setMaximumHeight(item_h * self.band_history_count + 2)
 
         self.hist_list.setMinimumHeight(1)
         self.hist_list.setSpacing(0)
@@ -358,6 +367,8 @@ class BandPanel(QWidget):
     def _refresh_engine(self, force_fetch=True):
         if self.engine is None:
             return
+        self.show_band_loading()
+        QCoreApplication.processEvents()
         if force_fetch:
             try:
                 status = self.engine.refresh()
@@ -369,6 +380,13 @@ class BandPanel(QWidget):
         self._update_band_returns(status)
 
     def _update_status_bar(self, status):
+        if self.strategy_busy:
+            font_pt = self.font.pointSize()
+            self.status_label.setText(
+                f'<span style="color:#ff8800;font-size:{font_pt+2}pt;font-weight:600;">⏳ 策略更新中…</span>'
+            )
+            self.metrics_label.setText(f'<span style="font-size:{font_pt}pt;">请稍候</span>')
+            return
         font_pt = self.font.pointSize()
         if status["in_band"]:
             start = status["band_start"]
@@ -408,13 +426,14 @@ class BandPanel(QWidget):
         self._update_band_history(status)
 
     def _update_band_history(self, status):
+        self.hist_list.setUpdatesEnabled(False)
         self.hist_list.clear()
         metric_key = BAND_RET_METRICS.get(self.band_return_metric, None)
         fg_hex = self.fg.name()
         item_font = QFont(self.font)
         item_font.setPointSize(max(6, self.font.pointSize() - 1))
         item_h = QFontMetrics(item_font).height() + max(0, self.line_extra_px)
-        max_completed = 2 if status["in_band"] else 3
+        max_completed = self.band_history_count if not status["in_band"] else max(1, self.band_history_count - 1)
         needs_defer = False
         for b in status["bands"][:max_completed]:
             if metric_key:
@@ -449,6 +468,8 @@ class BandPanel(QWidget):
             self.hist_list.setItemWidget(item, lbl)
 
         self._fit()
+        self.hist_list.setUpdatesEnabled(True)
+        self.hist_list.repaint()
         if needs_defer:
             QTimer.singleShot(0, lambda: self._deferred_hist_return(status))
 
@@ -456,7 +477,7 @@ class BandPanel(QWidget):
         metric_key = BAND_RET_METRICS.get(self.band_return_metric, None)
         if metric_key:
             return
-        max_completed = 2 if status["in_band"] else 3
+        max_completed = self.band_history_count if not status["in_band"] else max(1, self.band_history_count - 1)
         for b in status["bands"][:max_completed]:
             ck = (self.band_return_metric, b["start"], b["end"])
             if ck in self.engine._stock_band_cache:
@@ -680,6 +701,32 @@ class BandPanel(QWidget):
             self.quote_fetcher.b1s1_display = mode
             self._notify()
             self._refresh_stocks()
+
+    def show_band_loading(self, msg="⏳ 正在获取数据..."):
+        if not self.show_band_history:
+            return
+        self.hist_list.clear()
+        item = QListWidgetItem()
+        item.setSizeHint(QSize(0, 22))
+        fg_hex = self.fg.name()
+        lbl = QLabel(f'<span style="color:{fg_hex};font-size:9pt;">{msg}</span>', self.hist_list)
+        lbl.setStyleSheet("background: transparent;")
+        self.hist_list.addItem(item)
+        self.hist_list.setItemWidget(item, lbl)
+
+    def set_show_band_history(self, enabled):
+        self.show_band_history = bool(enabled)
+        self.sep2.setVisible(self.show_band_history)
+        self.hist_title.setVisible(self.show_band_history)
+        self.hist_list.setVisible(self.show_band_history)
+        self._fit()
+        self._notify()
+
+    def set_band_history_count(self, count):
+        self.band_history_count = max(1, min(10, int(count)))
+        self._notify()
+        if self.engine is not None:
+            self._refresh_engine(force_fetch=False)
 
     def contextMenuEvent(self, event):
         menu = QMenu(self)

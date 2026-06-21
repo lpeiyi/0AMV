@@ -1,6 +1,6 @@
 # 0AMVMonitor 测试报告
 
-**生成时间**: 2026-06-21 13:35:56
+**生成时间**: 2026-06-21 18:06:38
 
 ---
 
@@ -185,8 +185,24 @@
     > 切换 SMA M 下拉，strategy["sma_m"] 更新并触发重算
   - ✅ **test_strat_after_codes**
     > 调整策略参数后，自选表格 CRUD 功能仍然正常
+  - ✅ **test_show_band_history_toggle**
+    > 切换"显示历史波段"checkbox，同步更新 combo 启用状态和 panel 属性
+  - ✅ **test_band_history_count**
+    > 切换"显示波段数"combo，panel.band_history_count 正确更新
+  - ✅ **test_band_loading_indicator**
+    > show_band_loading 方法在 hist_list 中显示加载文字而不崩溃
+  - ✅ **test_cache_dir_change_create**
+    > 修改缓存目录到新路径，无旧缓存时 engine.cache_path 更新且目录被创建
+  - ✅ **test_cache_dir_move_existing**
+    > 修改缓存目录到新路径，有旧缓存时 cache.pkl 被移动到新目录，旧文件被删除
+  - ✅ **test_cache_dir_same_dir_skip**
+    > 修改缓存目录到同路径时 engine.cache_path 不变，跳过操作
+  - ✅ **test_strat_busy_locks_controls**
+    > 策略刷新进行中时 slider/button/combo 全部禁用，完成后自动恢复
+  - ✅ **test_strat_busy_debounce**
+    > 快速多次调用 _refresh_strategy 只触发一次 _do_refresh_strategy
 
-**结果**: ✅ 全部通过 (17/17)
+**结果**: ✅ 全部通过 (25/25)
 
 
 ---
@@ -196,7 +212,7 @@
 | # | 套件 | 通过 | 失败 | 状态 |
 |---|------|------|------|------|
 | 1 | 综合单元测试 (62项) | 62 | 0 | ✅ |
-| 2 | Settings 集成测试 (10项) | 17 | 0 | ✅ |
-| | **合计** | **79** | **0** | 🎉 全部通过 |
+| 2 | Settings 集成测试 (10项) | 25 | 0 | ✅ |
+| | **合计** | **87** | **0** | 🎉 全部通过 |
 
-🎉 **全部 79 项测试通过，无失败。**
+🎉 **全部 87 项测试通过，无失败。**

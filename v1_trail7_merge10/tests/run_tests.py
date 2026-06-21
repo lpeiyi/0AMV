@@ -7,7 +7,7 @@ PY = sys.executable
 
 TESTS = [
     ("综合单元测试 (62项)", "tests_comprehensive.py"),
-    ("Settings 集成测试 (17项)", "tests_integration.py"),
+    ("Settings 集成测试 (25项)", "tests_integration.py"),
 ]
 
 all_ok = True

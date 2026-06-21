@@ -256,6 +256,11 @@ class SettingsDialog(QDialog):
         tab3 = QWidget()
         v3 = QVBoxLayout(tab3)
 
+        self.lbl_strat_busy = QLabel()
+        self.lbl_strat_busy.setStyleSheet("color: #ff8800; font-weight: bold; font-size: 10pt;")
+        self.lbl_strat_busy.setVisible(False)
+        v3.addWidget(self.lbl_strat_busy)
+
         g_strat = QGroupBox("波段策略参数")
         g_strat.setContentsMargins(3, 12, 3, 6)
         gl_s = QGridLayout(g_strat)
@@ -353,13 +358,25 @@ class SettingsDialog(QDialog):
         g_band_cfg = QGroupBox("历史波段配置")
         g_band_cfg.setContentsMargins(3, 12, 3, 6)
         gl_band_cfg = QGridLayout(g_band_cfg)
-        gl_band_cfg.addWidget(QLabel("收益品种:"), 0, 0)
+        self.chk_show_band_history = QCheckBox("显示历史波段")
+        self.chk_show_band_history.setChecked(self.panel.show_band_history)
+        gl_band_cfg.addWidget(self.chk_show_band_history, 0, 0, 1, 2)
+        gl_band_cfg.addWidget(QLabel("显示波段数:"), 1, 0)
+        self.cmb_band_count = QComboBox()
+        self.cmb_band_count.setMinimumWidth(100)
+        for n in range(1, 11):
+            self.cmb_band_count.addItem(str(n), userData=n)
+        idx = self.cmb_band_count.findData(self.panel.band_history_count)
+        self.cmb_band_count.setCurrentIndex(idx if idx >= 0 else 2)
+        self.cmb_band_count.setEnabled(self.panel.show_band_history)
+        gl_band_cfg.addWidget(self.cmb_band_count, 1, 1)
+        gl_band_cfg.addWidget(QLabel("收益品种:"), 2, 0)
         self.cmb_band_metric = QComboBox()
         self.cmb_band_metric.setMinimumWidth(240)
         self.cmb_band_metric.view().setMinimumWidth(280)
-        gl_band_cfg.addWidget(self.cmb_band_metric, 0, 1)
+        gl_band_cfg.addWidget(self.cmb_band_metric, 2, 1)
         self._refresh_band_metric_combo()
-        gl_band_cfg.addWidget(QLabel("(选择后底部历史波段同步更新)"), 1, 0, 1, 2)
+        gl_band_cfg.addWidget(QLabel("(选择后底部历史波段同步更新)"), 3, 0, 1, 2)
         v4.addWidget(g_band_cfg)
 
         g_export = QGroupBox("导出波段收益")
@@ -438,16 +455,16 @@ class SettingsDialog(QDialog):
         self.chk_grid.toggled.connect(self._on_grid)
         self.slider_entry.valueChanged.connect(self._on_strat_entry_label)
         self.slider_entry.sliderReleased.connect(self._on_strat_entry_apply)
-        self.btn_entry_sub.clicked.connect(lambda: self._strat_btn_adj(self.slider_entry, -1, self._on_strat_entry_apply))
-        self.btn_entry_add.clicked.connect(lambda: self._strat_btn_adj(self.slider_entry, 1, self._on_strat_entry_apply))
+        self.btn_entry_sub.clicked.connect(lambda: self._strat_btn_adj(self.slider_entry, -1))
+        self.btn_entry_add.clicked.connect(lambda: self._strat_btn_adj(self.slider_entry, 1))
         self.slider_exit.valueChanged.connect(self._on_strat_exit_label)
         self.slider_exit.sliderReleased.connect(self._on_strat_exit_apply)
-        self.btn_exit_sub.clicked.connect(lambda: self._strat_btn_adj(self.slider_exit, -1, self._on_strat_exit_apply))
-        self.btn_exit_add.clicked.connect(lambda: self._strat_btn_adj(self.slider_exit, 1, self._on_strat_exit_apply))
+        self.btn_exit_sub.clicked.connect(lambda: self._strat_btn_adj(self.slider_exit, -1))
+        self.btn_exit_add.clicked.connect(lambda: self._strat_btn_adj(self.slider_exit, 1))
         self.slider_merge.valueChanged.connect(self._on_strat_merge_label)
         self.slider_merge.sliderReleased.connect(self._on_strat_merge_apply)
-        self.btn_merge_sub.clicked.connect(lambda: self._strat_btn_adj(self.slider_merge, -1, self._on_strat_merge_apply))
-        self.btn_merge_add.clicked.connect(lambda: self._strat_btn_adj(self.slider_merge, 1, self._on_strat_merge_apply))
+        self.btn_merge_sub.clicked.connect(lambda: self._strat_btn_adj(self.slider_merge, -1))
+        self.btn_merge_add.clicked.connect(lambda: self._strat_btn_adj(self.slider_merge, 1))
         self.cmb_sma_n.currentIndexChanged.connect(self._on_strat_sma)
         self.cmb_sma_m.currentIndexChanged.connect(self._on_strat_sma)
         self.edit_hotkey.editingFinished.connect(self._on_hotkey)
@@ -470,11 +487,17 @@ class SettingsDialog(QDialog):
         self.cmb_name_len.currentIndexChanged.connect(self._on_name_length)
         self.cmb_b1s1_display.currentIndexChanged.connect(self._on_b1s1_display)
         self.cmb_band_metric.currentIndexChanged.connect(self._on_band_metric_changed)
+        self.chk_show_band_history.toggled.connect(self._on_show_band_history)
+        self.cmb_band_count.currentIndexChanged.connect(self._on_band_count_changed)
         self.btn_export.clicked.connect(self._on_export_bands)
 
         self._name_refresh_timer = QTimer(self)
         self._name_refresh_timer.timeout.connect(self._refresh_names)
         self._name_refresh_timer.start(5000)
+
+        self._strat_timer = QTimer(self)
+        self._strat_timer.setSingleShot(True)
+        self._strat_timer.timeout.connect(self._do_refresh_strategy)
 
     def _apply_tab_size(self, idx):
         size = self.tab_sizes.get(idx, QSize(560, 480))
@@ -609,6 +632,15 @@ class SettingsDialog(QDialog):
         val = self.cmb_band_metric.currentData()
         if val:
             self.panel.set_band_return_metric(val)
+
+    def _on_show_band_history(self, checked):
+        self.cmb_band_count.setEnabled(checked)
+        self.panel.set_show_band_history(checked)
+
+    def _on_band_count_changed(self, idx):
+        n = self.cmb_band_count.currentData()
+        if n:
+            self.panel.set_band_history_count(n)
 
     def _make_combo_label(self, code):
         if code == "0AMV":
@@ -759,19 +791,40 @@ class SettingsDialog(QDialog):
             self.panel.engine.strategy["sma_m"] = m
             self._refresh_strategy()
 
-    def _refresh_strategy(self):
-        QTimer.singleShot(0, lambda: self._do_refresh_strategy())
+    def _set_strat_controls_enabled(self, enabled):
+        for w in (self.slider_entry, self.slider_exit, self.slider_merge,
+                  self.btn_entry_sub, self.btn_entry_add,
+                  self.btn_exit_sub, self.btn_exit_add,
+                  self.btn_merge_sub, self.btn_merge_add,
+                  self.cmb_sma_n, self.cmb_sma_m):
+            w.setEnabled(enabled)
 
-    def _strat_btn_adj(self, slider, delta, apply_fn):
+    def _refresh_strategy(self):
+        self._strat_timer.stop()
+        self._strat_timer.start(300)
+        self.lbl_strat_busy.setText("⏳ 策略计算中，请稍候...")
+        self.lbl_strat_busy.setVisible(True)
+        self.panel.strategy_busy = True
+        self._set_strat_controls_enabled(False)
+        self.panel.show_band_loading()
+        from PySide6.QtCore import QCoreApplication
+        QCoreApplication.processEvents()
+
+    def _strat_btn_adj(self, slider, delta):
         v = slider.value() + delta
         v = max(slider.minimum(), min(slider.maximum(), v))
         slider.setValue(v)
-        apply_fn()
+        self._refresh_strategy()
 
     def _do_refresh_strategy(self):
-        self.panel.engine._compute()
-        self.panel.engine._detect()
-        self.panel._refresh_engine(force_fetch=False)
+        try:
+            self.panel.engine._compute()
+            self.panel.engine._detect()
+            self.panel._refresh_engine(force_fetch=False)
+        finally:
+            self.lbl_strat_busy.setVisible(False)
+            self.panel.strategy_busy = False
+            self._set_strat_controls_enabled(True)
 
     def _on_hotkey(self):
         hk = self.edit_hotkey.keySequence().toString()
@@ -796,6 +849,14 @@ class SettingsDialog(QDialog):
         if new_dir and self.panel.engine:
             new_path = os.path.normpath(os.path.join(new_dir, "cache.pkl"))
             if new_path != self.panel.engine.cache_path:
+                import shutil
+                old_path = self.panel.engine.cache_path
+                os.makedirs(os.path.dirname(new_path), exist_ok=True)
+                if os.path.isfile(old_path):
+                    try:
+                        shutil.move(old_path, new_path)
+                    except OSError:
+                        pass
                 self.panel.engine.cache_path = new_path
                 self.panel._notify()
 
