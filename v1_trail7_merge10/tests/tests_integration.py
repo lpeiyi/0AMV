@@ -48,6 +48,7 @@ class MockPanel:
         self.show_band_history = True
         self.band_history_count = 3
         self.strategy_busy = False
+        self.band_return_metric = '159915'
         self.quote_fetcher = type('o', (), {'band_returns': {}})()
     def _refresh_stocks(self):
         pass

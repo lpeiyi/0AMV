@@ -261,6 +261,7 @@ class MockPanel:
     band_ret_visible=True; b1s1_display='qty'; short_code=False
     name_length=0; default_color=True; fg=None
     show_band_history=True; band_history_count=3; strategy_busy=False
+    band_return_metric='159915'
     quote_fetcher = type('o',(),{'band_returns':{}})()
     def get_code_name(self,c):
         return {'sh000001':'上证指数','sz399006':'创业板指','sz159915':'创业板ETF'}.get(c,c)

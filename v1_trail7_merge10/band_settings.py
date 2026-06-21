@@ -656,7 +656,7 @@ class SettingsDialog(QDialog):
             lbl = self._make_combo_label(code)
             self.cmb_band_metric.addItem(lbl, userData=code)
         self.cmb_band_metric.addItem("0AMV", userData="0AMV")
-        idx = self.cmb_band_metric.findData(current) if current else -1
+        idx = self.cmb_band_metric.findData(current or self.panel.band_return_metric)
         if idx >= 0:
             self.cmb_band_metric.setCurrentIndex(idx)
         self.cmb_band_metric.blockSignals(False)
@@ -715,7 +715,15 @@ class SettingsDialog(QDialog):
         filepath = os.path.join(cache_dir, filename)
         with open(filepath, 'w', newline='', encoding='utf-8-sig') as f:
             writer = csv.writer(f)
-            writer.writerow(['band_start', 'band_end', 'days', 'return_pct'])
+            strat = self.panel.engine.strategy
+            writer.writerow(['# 策略参数'])
+            writer.writerow(['入场阈值', f">= {strat['entry']:.1f}%"])
+            writer.writerow(['退出回撤', f"<= {strat['exit_dd']:.1f}%"])
+            writer.writerow(['合并间隔', f"<= {strat['merge_gap']}天"])
+            writer.writerow(['SMA N', str(strat['sma_n'])])
+            writer.writerow(['SMA M', str(strat['sma_m'])])
+            writer.writerow([])
+            writer.writerow(['波段开始', '波段结束', '持续天数', '收益率'])
             writer.writerows(rows)
         QMessageBox.information(self, "导出完成", f"已保存 {len(rows)} 条记录到:\n{filepath}")
 
