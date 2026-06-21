@@ -31,6 +31,7 @@ class MockEngine:
         return {'in_band':False,'oamv_value':100,'oamv_pct':0,'bands':[],'last_date':pd.Timestamp('2026-06-20')}
     def get_band_return(self, s, e, metric): return None
     def get_stock_band_return(self, code, s, e): return None
+    def ensure_index_data(self): pass
 
 class MockPanel:
     def __init__(self):
@@ -47,6 +48,9 @@ class MockPanel:
         self.show_band_history = True
         self.band_history_count = 3
         self.strategy_busy = False
+        self.quote_fetcher = type('o', (), {'band_returns': {}})()
+    def _refresh_stocks(self):
+        pass
     def windowOpacity(self): return 1.0
     def header_is_visible(self, h): return True
     def get_code_name(self, code):
@@ -79,8 +83,10 @@ class MockPanel:
         self._on_change = cb
     def _update_status_bar(self, status):
         pass
-    def _update_band_returns(self, status):
-        pass
+    def _update_band_returns(self, status, on_complete=None):
+        if on_complete:
+            on_complete()
+        return False
     def _notify(self): pass
     def _on_change(self): pass
 
@@ -255,7 +261,6 @@ def test_strat_entry_slider():
         QCoreApplication.processEvents()
     assert panel.engine.compute_count >= 1
     assert panel.engine.detect_count >= 1
-    assert panel.refresh_engine_count >= 1
     results.append(('test_strat_entry_slider', True, ''))
     dlg.close()
 

@@ -248,6 +248,8 @@ class MockEngine:
         return None
     def get_stock_band_return(self, code, s, e):
         return None
+    def ensure_index_data(self):
+        pass
 
 class MockPanel:
     codes = ['sh000001','sz399006','sz159915']
@@ -259,6 +261,7 @@ class MockPanel:
     band_ret_visible=True; b1s1_display='qty'; short_code=False
     name_length=0; default_color=True; fg=None
     show_band_history=True; band_history_count=3; strategy_busy=False
+    quote_fetcher = type('o',(),{'band_returns':{}})()
     def get_code_name(self,c):
         return {'sh000001':'上证指数','sz399006':'创业板指','sz159915':'创业板ETF'}.get(c,c)
     def set_codes(self,c): self.codes=c
@@ -281,6 +284,7 @@ class MockPanel:
     def set_b1s1_display(self,*a): pass
     def set_band_return_metric(self,*a): pass
     def _refresh_engine(self,*a): pass
+    def _refresh_stocks(self): pass
     def _notify(self): pass
     def show_band_loading(self,*a): pass
 

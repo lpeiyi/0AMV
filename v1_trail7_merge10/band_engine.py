@@ -124,6 +124,32 @@ class BandEngine:
         self._detect()
         self.save_cache()
 
+    def ensure_index_data(self):
+        """确保 sh/sz/etf 数据已加载，缺失时轻量抓取（单次尝试，无重试）"""
+        import akshare as ak
+        import pandas as pd
+        if self.sh is None or self.sh.empty:
+            try:
+                self.sh = ak.stock_zh_index_hist_csindex(symbol='000001', start_date='20100101', end_date='20261231')
+                self.sh['date'] = pd.to_datetime(self.sh['日期'])
+                self.sh = self.sh.sort_values('date').set_index('date')
+            except:
+                pass
+        if self.sz is None or self.sz.empty:
+            try:
+                self.sz = ak.stock_zh_index_daily_tx(symbol='sz399006')
+                self.sz['date'] = pd.to_datetime(self.sz['date'])
+                self.sz = self.sz.sort_values('date').set_index('date')
+            except:
+                pass
+        if self.etf is None or self.etf.empty:
+            try:
+                self.etf = ak.stock_zh_index_daily_tx(symbol='sz159915')
+                self.etf['date'] = pd.to_datetime(self.etf['date'])
+                self.etf = self.etf.sort_values('date').set_index('date')
+            except:
+                pass
+
     def _compute(self):
         import numpy as np
         self.oamv = np.zeros(len(self.df))
@@ -206,21 +232,25 @@ class BandEngine:
 
     def get_stock_band_return(self, code, start, end):
         cache_key = (code, start, end)
-        if cache_key in self._stock_band_cache:
-            return self._stock_band_cache[cache_key]
+        cached = self._stock_band_cache.get(cache_key)
+        if cached is not None:
+            return cached
 
         raw = code[2:] if code[:2] in ('sh', 'sz', 'bj') else code
         if raw == "000001":
             ret = self.get_band_return(start, end, "sh")
-            self._stock_band_cache[cache_key] = ret
+            if ret is not None:
+                self._stock_band_cache[cache_key] = ret
             return ret
         if raw == "399006":
             ret = self.get_band_return(start, end, "sz")
-            self._stock_band_cache[cache_key] = ret
+            if ret is not None:
+                self._stock_band_cache[cache_key] = ret
             return ret
         if raw == "159915":
             ret = self.get_band_return(start, end, "etf")
-            self._stock_band_cache[cache_key] = ret
+            if ret is not None:
+                self._stock_band_cache[cache_key] = ret
             return ret
 
         import akshare as ak

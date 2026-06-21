@@ -582,7 +582,7 @@ class SettingsDialog(QDialog):
         self.list_codes.insertRow(row)
         it0 = QTableWidgetItem(c)
         it0.setFlags(Qt.ItemIsEnabled | Qt.ItemIsSelectable | Qt.ItemIsEditable | Qt.ItemIsUserCheckable)
-        it0.setCheckState(Qt.Unchecked)
+        it0.setCheckState(Qt.Checked)
         it0.setData(Qt.UserRole, c)
         self.list_codes.setItem(row, 0, it0)
         name = self.panel.get_code_name(c)
@@ -800,6 +800,8 @@ class SettingsDialog(QDialog):
             w.setEnabled(enabled)
 
     def _refresh_strategy(self):
+        if self.panel.strategy_busy:
+            return
         self._strat_timer.stop()
         self._strat_timer.start(300)
         self.lbl_strat_busy.setText("⏳ 策略计算中，请稍候...")
@@ -820,11 +822,34 @@ class SettingsDialog(QDialog):
         try:
             self.panel.engine._compute()
             self.panel.engine._detect()
-            self.panel._refresh_engine(force_fetch=False)
+            self.panel.engine.bear_market_start = (
+                self.panel.engine.bands[-1][1] if self.panel.engine.bands else None
+            )
+            status = self.panel.engine.get_status()
+
+            for code in self.panel.checked_codes:
+                self.panel.quote_fetcher.band_returns[code] = "计算中…"
+            self.panel._refresh_stocks()
+            from PySide6.QtCore import QCoreApplication
+            QCoreApplication.processEvents()
+
+            self.panel._update_status_bar(status)
+
+            self.panel.strategy_busy = False
+            busy = self.panel._update_band_returns(status, on_complete=self._on_data_ready)
+            if not busy:
+                self._on_data_ready()
+        except:
+            import traceback
+            traceback.print_exc()
+            self._on_data_ready()
         finally:
             self.lbl_strat_busy.setVisible(False)
-            self.panel.strategy_busy = False
-            self._set_strat_controls_enabled(True)
+
+    def _on_data_ready(self):
+        self.panel.strategy_busy = False
+        self.panel._update_status_bar(self.panel.engine.get_status())
+        self._set_strat_controls_enabled(True)
 
     def _on_hotkey(self):
         hk = self.edit_hotkey.keySequence().toString()

@@ -55,6 +55,7 @@ class BandPanel(QWidget):
         self.show_band_history = bool(cfg.get("show_band_history", True))
         self.band_history_count = int(cfg.get("band_history_count", 3))
         self.strategy_busy = False
+        self._deferred_version = 0
 
         self.quote_fetcher = QuotesFetcher()
         self.quote_fetcher.short_code = self.short_code
@@ -367,6 +368,8 @@ class BandPanel(QWidget):
     def _refresh_engine(self, force_fetch=True):
         if self.engine is None:
             return
+        if self.strategy_busy:
+            return
         self.show_band_loading()
         QCoreApplication.processEvents()
         if force_fetch:
@@ -487,9 +490,12 @@ class BandPanel(QWidget):
                 self.engine._stock_band_cache[ck] = ret
         self._update_band_history(status)
 
-    def _update_band_returns(self, status):
+    def _update_band_returns(self, status, on_complete=None):
+        if self.strategy_busy:
+            return True
+        self.engine.ensure_index_data()
         self.quote_fetcher.band_returns = {}
-        metric_key = BAND_RET_METRICS.get(self.band_return_metric, "etf")
+
         if status["in_band"]:
             start = status["band_start"]
             end = status["last_date"]
@@ -504,40 +510,45 @@ class BandPanel(QWidget):
             for code in self.checked_codes:
                 self.quote_fetcher.band_returns[code] = "0.00%"
             self._refresh_stocks()
-            return
+            return False
 
-        fallback = self.engine.get_band_return(start, end, metric_key)
-        if fallback is None:
-            fallback = self.engine.get_band_return(start, end, "oamv")
-        fallback_str = f"{fallback:+.2f}%" if fallback is not None else "N/A"
-
-        needs_api = False
+        # 所有代码先标记"计算中…"
         for code in self.checked_codes:
-            ck = (code, start, end)
-            if ck in self.engine._stock_band_cache:
-                continue
-            raw = code[2:] if code[:2] in ('sh', 'sz', 'bj') else code
-            if raw not in ("000001", "399006", "159915"):
-                needs_api = True
-                break
+            self.quote_fetcher.band_returns[code] = "计算中…"
 
-        if not needs_api:
-            for code in self.checked_codes:
+        deferred_codes = []
+        for code in self.checked_codes:
+            raw = code[2:] if code[:2] in ('sh', 'sz', 'bj') else code
+            if raw in ("000001", "399006", "159915"):
                 ret = self.engine.get_stock_band_return(code, start, end)
-                self.quote_fetcher.band_returns[code] = f"{ret:+.2f}%" if ret is not None else fallback_str
-            self._refresh_stocks()
-        else:
-            for code in self.checked_codes:
-                self.quote_fetcher.band_returns[code] = fallback_str
-            self._refresh_stocks()
+                if ret is not None:
+                    self.quote_fetcher.band_returns[code] = f"{ret:+.2f}%"
+            else:
+                ck = (code, start, end)
+                if ck in self.engine._stock_band_cache:
+                    ret = self.engine.get_stock_band_return(code, start, end)
+                    if ret is not None:
+                        self.quote_fetcher.band_returns[code] = f"{ret:+.2f}%"
+                    else:
+                        deferred_codes.append(code)
+                else:
+                    deferred_codes.append(code)
+
+        self._refresh_stocks()
+        if deferred_codes:
+            self._deferred_version += 1
+            v = self._deferred_version
             self._deferred_start = start
             self._deferred_end = end
-            self._deferred_fallback = fallback_str
-            self._deferred_codes = list(self.checked_codes)
+            self._deferred_codes = deferred_codes
             self._deferred_idx = 0
-            QTimer.singleShot(0, self._deferred_band_returns)
+            QTimer.singleShot(0, lambda: self._deferred_band_returns(v, on_complete))
+            return True
+        return False
 
-    def _deferred_band_returns(self):
+    def _deferred_band_returns(self, version, on_complete=None):
+        if version != self._deferred_version:
+            return
         while self._deferred_idx < len(self._deferred_codes):
             code = self._deferred_codes[self._deferred_idx]
             if (code, self._deferred_start, self._deferred_end) not in self.engine._stock_band_cache:
@@ -548,6 +559,8 @@ class BandPanel(QWidget):
             self._deferred_idx += 1
         if self._deferred_idx >= len(self._deferred_codes):
             self._refresh_stocks()
+            if on_complete:
+                on_complete()
             return
         code = self._deferred_codes[self._deferred_idx]
         ret = self.engine.get_stock_band_return(code, self._deferred_start, self._deferred_end)
@@ -556,8 +569,10 @@ class BandPanel(QWidget):
         self._deferred_idx += 1
         if self._deferred_idx >= len(self._deferred_codes):
             self._refresh_stocks()
+            if on_complete:
+                on_complete()
         else:
-            QTimer.singleShot(0, self._deferred_band_returns)
+            QTimer.singleShot(0, lambda: self._deferred_band_returns(version, on_complete))
 
     def _refresh_stocks(self):
         try:
