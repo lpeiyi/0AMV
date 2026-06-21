@@ -1,6 +1,6 @@
 # 0AMVMonitor 测试报告
 
-**生成时间**: 2026-06-21 18:06:38
+**生成时间**: 2026-06-21 23:22:57
 
 ---
 
@@ -8,8 +8,8 @@
 
 **脚本**: `tests_comprehensive.py`
 
-  Total:   62
-  Passed:  62
+  Total:   68
+  Passed:  68
   Rate:    100.0%
 
 ### 测试项详情
@@ -138,8 +138,16 @@
     > CLI 收益对比脚本语法正确
   - ✅ **band_monitor.py syntax OK**
     > GUI 入口脚本语法正确
+  - ✅ **Settings: _collect_codes with invalid input no recursion**
+  - ✅ **BandPanel: corrupt bg config does not crash**
+  - ✅ **EngineWorker: error signal emitted on fetch failure**
+  - ✅ **BandPanel: missing bg config keys use defaults**
+  - ✅ **BandEngine: get_status with no data returns safe dict**
+    > 状态字典格式验证：返回字段完整
+  - ✅ **BandEngine: get_status with empty df returns safe dict**
+    > 状态字典格式验证：返回字段完整
 
-**结果**: ✅ 全部通过 (62/62)
+**结果**: ✅ 全部通过 (68/68)
 
 
 ---
@@ -211,8 +219,8 @@
 
 | # | 套件 | 通过 | 失败 | 状态 |
 |---|------|------|------|------|
-| 1 | 综合单元测试 (62项) | 62 | 0 | ✅ |
+| 1 | 综合单元测试 (62项) | 68 | 0 | ✅ |
 | 2 | Settings 集成测试 (10项) | 25 | 0 | ✅ |
-| | **合计** | **87** | **0** | 🎉 全部通过 |
+| | **合计** | **93** | **0** | 🎉 全部通过 |
 
-🎉 **全部 87 项测试通过，无失败。**
+🎉 **全部 93 项测试通过，无失败。**

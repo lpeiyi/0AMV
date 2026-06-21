@@ -16,8 +16,9 @@ def fetch_qq(s, retries=5):
     raise Exception('fail')
 
 # 算法波段
+_NOW = pd.Timestamp.now().strftime('%Y%m%d')
 print("获取数据...")
-df = fetch_csindex('000985','20100101','20260619')
+df = fetch_csindex('000985','20100101',_NOW)
 df = df.rename(columns={'日期':'date','成交金额':'amount_yi'})
 df['date'] = pd.to_datetime(df['date'])
 df = df.sort_values('date').reset_index(drop=True)
@@ -52,7 +53,7 @@ for bs,be in raw_bands[1:]:
     else:
         bands.append((bs,be))
 
-sh = fetch_csindex('000001','20100101','20260619')
+sh = fetch_csindex('000001','20100101',_NOW)
 sh['date'] = pd.to_datetime(sh['日期'])
 sh = sh.sort_values('date').set_index('date')
 cy = fetch_qq('sz399006')

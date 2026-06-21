@@ -81,7 +81,7 @@ class BandEngine:
         import pandas as pd
         for i in range(5):
             try:
-                df = ak.stock_zh_index_hist_csindex(symbol='000985', start_date='20100101', end_date='20261231')
+                df = ak.stock_zh_index_hist_csindex(symbol='000985', start_date='20100101', end_date=pd.Timestamp.now().strftime('%Y%m%d'))
                 df = df.rename(columns={'日期': 'date', '成交金额': 'amount_yi'})
                 df['date'] = pd.to_datetime(df['date'])
                 self.df = df.sort_values('date').reset_index(drop=True)
@@ -97,7 +97,7 @@ class BandEngine:
         self.etf = pd.DataFrame()
         for i in range(5):
             try:
-                self.sh = ak.stock_zh_index_hist_csindex(symbol='000001', start_date='20100101', end_date='20261231')
+                self.sh = ak.stock_zh_index_hist_csindex(symbol='000001', start_date='20100101', end_date=pd.Timestamp.now().strftime('%Y%m%d'))
                 self.sh['date'] = pd.to_datetime(self.sh['日期'])
                 self.sh = self.sh.sort_values('date').set_index('date')
                 break
@@ -130,7 +130,7 @@ class BandEngine:
         import pandas as pd
         if self.sh is None or self.sh.empty:
             try:
-                self.sh = ak.stock_zh_index_hist_csindex(symbol='000001', start_date='20100101', end_date='20261231')
+                self.sh = ak.stock_zh_index_hist_csindex(symbol='000001', start_date='20100101', end_date=pd.Timestamp.now().strftime('%Y%m%d'))
                 self.sh['date'] = pd.to_datetime(self.sh['日期'])
                 self.sh = self.sh.sort_values('date').set_index('date')
             except:
@@ -213,7 +213,7 @@ class BandEngine:
         try:
             for i in range(3):
                 try:
-                    df_new = ak.stock_zh_index_hist_csindex(symbol='000985', start_date='20200101', end_date='20261231')
+                    df_new = ak.stock_zh_index_hist_csindex(symbol='000985', start_date='20200101', end_date=pd.Timestamp.now().strftime('%Y%m%d'))
                     df_new = df_new.rename(columns={'日期': 'date', '成交金额': 'amount_yi'})
                     df_new['date'] = pd.to_datetime(df_new['date'])
                     df_new = df_new.sort_values('date').reset_index(drop=True)
@@ -311,6 +311,8 @@ class BandEngine:
 
     def get_status(self):
         import pandas as pd
+        if self.df is None or len(self.df) == 0 or self.oamv is None or len(self.oamv) == 0:
+            return {"in_band": False, "oamv_value": 0, "oamv_pct": 0, "last_date": None, "bands": []}
         in_band = self.open_band_start is not None
         now = self.df['date'].max()
         oamv_now = self.oamv[-1]

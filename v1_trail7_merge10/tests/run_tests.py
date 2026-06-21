@@ -6,7 +6,7 @@ PROJ = os.path.dirname(HERE)
 PY = sys.executable
 
 TESTS = [
-    ("综合单元测试 (62项)", "tests_comprehensive.py"),
+    ("综合单元测试 (68项)", "tests_comprehensive.py"),
     ("Settings 集成测试 (25项)", "tests_integration.py"),
 ]
 

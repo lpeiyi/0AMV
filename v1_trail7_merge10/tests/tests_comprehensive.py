@@ -580,6 +580,109 @@ def t100():
 # ==========================================================
 # RUN
 # ==========================================================
+# ==========================================================
+# PART 10: Defensive fixes
+# ==========================================================
+section('PART 10: Defensive fixes')
+
+@test('BandEngine: get_status with no data returns safe dict')
+def t_safe_get_status():
+    engine = __import__('band_engine', fromlist=['BandEngine']).BandEngine()
+    ret = engine.get_status()
+    assert isinstance(ret, dict)
+    assert ret['in_band'] == False
+    assert ret['oamv_value'] == 0
+    assert ret['bands'] == []
+
+@test('BandEngine: get_status with empty df returns safe dict')
+def t_safe_get_status_empty_df():
+    import pandas as pd
+    import numpy as np
+    engine = __import__('band_engine', fromlist=['BandEngine']).BandEngine()
+    engine.df = pd.DataFrame()
+    engine.oamv = np.array([])
+    engine.oamv_pct = np.array([])
+    ret = engine.get_status()
+    assert isinstance(ret, dict)
+
+@test('EngineWorker: error signal emitted on fetch failure')
+def t_engine_worker_error():
+    from band_monitor import EngineWorker
+    from PySide6.QtCore import QObject, Signal
+    errors = []
+    def on_err(msg):
+        errors.append(msg)
+    class FailEngine(QObject):
+        def fetch_all(self):
+            raise RuntimeError("mock fetch failure")
+    engine = FailEngine()
+    engine._stock_band_cache = {}
+    engine.strategy = {}
+    engine.bands = []
+    engine.raw_bands = []
+    engine.sh = engine.sz = engine.etf = None
+    engine.df = None
+    engine.oamv = None
+    engine.oamv_pct = None
+    engine.open_band_start = None
+    engine.open_band_peak = None
+    engine.bear_market_start = None
+    worker = EngineWorker(engine)
+    worker.error.connect(on_err)
+    worker.run()
+    assert len(errors) > 0
+    assert 'mock fetch failure' in errors[0]
+
+@test('BandPanel: corrupt bg config does not crash')
+def t_corrupt_bg_config():
+    from PySide6.QtWidgets import QApplication
+    from PySide6.QtGui import QColor
+    app = QApplication.instance() or QApplication([])
+    from band_panel import BandPanel
+    panel = BandPanel({"bg": "invalid"}, None)
+    assert isinstance(panel.bg, QColor)
+    assert panel.bg.alpha() == 191
+
+@test('BandPanel: missing bg config keys use defaults')
+def t_missing_bg_keys():
+    from PySide6.QtWidgets import QApplication
+    from PySide6.QtGui import QColor
+    app = QApplication.instance() or QApplication([])
+    from band_panel import BandPanel
+    panel = BandPanel({"bg": {"r": 255}}, None)
+    assert isinstance(panel.bg, QColor)
+    assert panel.bg.red() == 255
+    assert panel.bg.green() == 0
+    assert panel.bg.blue() == 0
+
+@test('Settings: _collect_codes with invalid input no recursion')
+def t_collect_codes_no_recursion():
+    import sys
+    from PySide6.QtWidgets import QApplication, QTableWidget, QTableWidgetItem
+    from PySide6.QtCore import Qt
+    app = QApplication.instance() or QApplication([])
+    from band_settings import SettingsDialog
+    # Verify _collect_codes handles invalid input without recursion
+    dlg = SettingsDialog.__new__(SettingsDialog)
+    dlg.list_codes = QTableWidget(0, 2)
+    dlg.list_codes.setHorizontalHeaderLabels(["代码", "名称"])
+    # Insert an invalid code row
+    dlg.list_codes.insertRow(0)
+    it0 = QTableWidgetItem("@@@@")
+    it0.setFlags(Qt.ItemIsEnabled | Qt.ItemIsSelectable | Qt.ItemIsEditable | Qt.ItemIsUserCheckable)
+    it0.setCheckState(Qt.Checked)
+    dlg.list_codes.setItem(0, 0, it0)
+    it1 = QTableWidgetItem("invalid")
+    it1.setFlags(Qt.ItemIsEnabled | Qt.ItemIsSelectable)
+    dlg.list_codes.setItem(0, 1, it1)
+    before = sys.getrecursionlimit()
+    sys.setrecursionlimit(100)
+    try:
+        rows = dlg._collect_codes()
+        assert rows == [], f"expected empty, got {rows}"
+    finally:
+        sys.setrecursionlimit(before)
+
 test_fns = [(k,v) for k,v in list(locals().items()) if k.startswith('t') and callable(v) and k != 'test']
 test_fns.sort(key=lambda x: x[0])
 

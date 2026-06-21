@@ -2,11 +2,12 @@ import akshare as ak
 import pandas as pd
 import numpy as np
 
+_NOW = pd.Timestamp.now().strftime('%Y%m%d')
 print("获取中证全指(000985)历史数据...")
 df = ak.stock_zh_index_hist_csindex(
     symbol='000985',
     start_date='20100101',
-    end_date='20260619'
+    end_date=_NOW
 )
 
 df = df.rename(columns={
@@ -117,7 +118,7 @@ def fetch_qq(s, retries=5):
     raise Exception('fail')
 
 print("下载数据...")
-sh = fetch_csindex('000001','20100101','20260619')
+sh = fetch_csindex('000001','20100101',_NOW)
 sh['date'] = pd.to_datetime(sh['日期'])
 sh = sh.sort_values('date').set_index('date')
 

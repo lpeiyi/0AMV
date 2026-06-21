@@ -29,12 +29,16 @@ def save_config(cfg):
 
 class EngineWorker(QObject):
     finished = Signal()
+    error = Signal(str)
     def __init__(self, engine):
         super().__init__()
         self.engine = engine
     def run(self):
-        self.engine.fetch_all()
-        self.finished.emit()
+        try:
+            self.engine.fetch_all()
+            self.finished.emit()
+        except Exception as e:
+            self.error.emit(str(e))
 
 class BandApp(QApplication):
     def __init__(self, argv):
@@ -112,6 +116,7 @@ class BandApp(QApplication):
         self._engine_thread.started.connect(self._engine_worker.run)
         self._engine_worker.finished.connect(self._on_engine_ready)
         self._engine_worker.finished.connect(self._engine_thread.quit)
+        self._engine_worker.error.connect(self._on_engine_error)
         self._engine_thread.start()
 
     def _on_engine_ready(self):
@@ -119,6 +124,9 @@ class BandApp(QApplication):
         self.win.engine = self.engine
         self.win.on_engine_ready()
         self.save_now()
+
+    def _on_engine_error(self, msg):
+        self.win.show_error(f"数据获取失败: {msg}")
 
     def _on_tray(self, reason):
         if reason in (QSystemTrayIcon.Trigger, QSystemTrayIcon.DoubleClick):

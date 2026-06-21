@@ -507,45 +507,49 @@ class SettingsDialog(QDialog):
 
     def _collect_codes(self):
         from band_stocks import normalize_code
-        codes = []
-        seen = set()
-        for row in range(self.list_codes.rowCount()):
-            it0 = self.list_codes.item(row, 0)
-            if it0 is None:
-                continue
-            txt = it0.text()
-            raw = it0.data(Qt.UserRole) or txt
-            if txt != raw:
-                norm = normalize_code(txt)
-                if norm:
-                    self.list_codes.blockSignals(True)
-                    it0.setData(Qt.UserRole, norm)
-                    if it0.text() != norm:
-                        it0.setText(norm)
-                    self.list_codes.blockSignals(False)
-                    raw = norm
-            else:
-                norm = normalize_code(raw)
-            if norm:
-                if norm not in seen:
-                    seen.add(norm)
-                    codes.append(norm)
-                if raw != norm:
-                    self.list_codes.blockSignals(True)
-                    it0.setData(Qt.UserRole, norm)
-                    if it0.text() != norm:
-                        it0.setText(norm)
-                    self.list_codes.blockSignals(False)
-            else:
-                prev = it0.data(Qt.UserRole)
-                if prev:
-                    self.list_codes.blockSignals(True)
-                    it0.setText(prev)
-                    self.list_codes.blockSignals(False)
+        while True:
+            codes = []
+            seen = set()
+            row = 0
+            while row < self.list_codes.rowCount():
+                it0 = self.list_codes.item(row, 0)
+                if it0 is None:
+                    row += 1
+                    continue
+                txt = it0.text()
+                raw = it0.data(Qt.UserRole) or txt
+                if txt != raw:
+                    norm = normalize_code(txt)
+                    if norm:
+                        self.list_codes.blockSignals(True)
+                        it0.setData(Qt.UserRole, norm)
+                        if it0.text() != norm:
+                            it0.setText(norm)
+                        self.list_codes.blockSignals(False)
+                        raw = norm
                 else:
-                    self.list_codes.removeRow(row)
-                    return self._collect_codes()
-        return codes
+                    norm = normalize_code(raw)
+                if norm:
+                    if norm not in seen:
+                        seen.add(norm)
+                        codes.append(norm)
+                    if raw != norm:
+                        self.list_codes.blockSignals(True)
+                        it0.setData(Qt.UserRole, norm)
+                        if it0.text() != norm:
+                            it0.setText(norm)
+                        self.list_codes.blockSignals(False)
+                    row += 1
+                else:
+                    prev = it0.data(Qt.UserRole)
+                    if prev:
+                        self.list_codes.blockSignals(True)
+                        it0.setText(prev)
+                        self.list_codes.blockSignals(False)
+                        row += 1
+                    else:
+                        self.list_codes.removeRow(row)
+            return codes
 
     def _update_name_for_row(self, row):
         it0 = self.list_codes.item(row, 0)

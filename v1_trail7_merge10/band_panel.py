@@ -29,8 +29,11 @@ class BandPanel(QWidget):
         font_size = int(cfg.get("font_size", 10))
         self.line_extra_px = int(cfg.get("line_extra_px", 1))
         self.fg = QColor(cfg.get("fg", "#FFFFFF"))
-        bg = cfg.get("bg", {"r": 0, "g": 0, "b": 0, "a": 191})
-        self.bg = QColor(bg["r"], bg["g"], bg["b"], bg["a"])
+        bg = cfg.get("bg", {})
+        try:
+            self.bg = QColor(int(bg.get("r", 0)), int(bg.get("g", 0)), int(bg.get("b", 0)), int(bg.get("a", 191)))
+        except:
+            self.bg = QColor(0, 0, 0, 191)
         self.default_color = bool(cfg.get("default_color", False))
         self.opacity_pct = int(cfg.get("opacity_pct", 90))
         self.header_visible = bool(cfg.get("header_visible", False))
@@ -716,6 +719,15 @@ class BandPanel(QWidget):
             self.quote_fetcher.b1s1_display = mode
             self._notify()
             self._refresh_stocks()
+
+    def show_error(self, msg):
+        fg_hex = self.fg.name()
+        self.status_label.setText(
+            f'<span style="color:#ff4444;font-size:11pt;font-weight:600;">⚠ {msg}</span>'
+        )
+        self.metrics_label.setText(
+            f'<span style="color:#ff4444;font-size:9pt;">请检查网络连接后重启</span>'
+        )
 
     def show_band_loading(self, msg="⏳ 正在获取数据..."):
         if not self.show_band_history:
